@@ -1,34 +1,59 @@
 import { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { io as createClient, type Socket } from "socket.io-client";
-import type {
-  AckResponse,
-  ClientToServerEvents,
-  JoinRoomPayload,
-  LobbyRoomSnapshot,
-  PublicRoomSummary,
-  RoomAccess,
-  ServerToClientEvents,
+import {
+  legalActions,
+  type AckResponse,
+  type Capacity,
+  type ClientToServerEvents,
+  type GameState,
+  type JoinRoomPayload,
+  type LobbyRoomSnapshot,
+  type PublicRoomSummary,
+  type RoomAccess,
+  type ServerToClientEvents,
 } from "@seasalt/game";
+
+// ---------- 每款游戏不一样的地方 ----------
+/** 最小的房间人数（对局要坐满才开始测）。 */
+const CAPACITY: Capacity = 2;
+/** 这款游戏有没有藏起来的信息。 */
+const HIDDEN_INFO = true;
+/** 开局后先走几步（每步选轮到的人的第一个合法动作），让场上有藏起来的牌。 */
+const STEPS = 4;
+/** 这份状态里看得到几样藏起来的东西（手牌之类）。 */
+function secretsSeen(game: GameState): number {
+  return game.players.reduce((total, player) => total + player.hand.length, 0);
+}
+// ----------------------------------------
 
 type TestSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
 const clients = new Set<TestSocket>();
+const latest = new Map<TestSocket, LobbyRoomSnapshot>();
 let serverUrl = "";
 let httpServer: typeof import("../src/index.js").httpServer;
 let serverIo: typeof import("../src/index.js").io;
+let nameSeq = 0;
 
 function connect(): Promise<TestSocket> {
   return new Promise((resolve, reject) => {
     const client: TestSocket = createClient(serverUrl, { transports: ["websocket"], reconnection: false });
     clients.add(client);
+    client.on("room:updated", (room) => latest.set(client, room));
     client.once("connect", () => resolve(client));
     client.once("connect_error", reject);
   });
 }
 
+/** 每次都不一样的昵称（2–18 个字符）。 */
+function nick(prefix: string): string {
+  nameSeq += 1;
+  return `${prefix}${nameSeq}`;
+}
+
 function create(client: TestSocket, name: string): Promise<LobbyRoomSnapshot> {
-  return new Promise((resolve, reject) => client.emit("room:create", { name, capacity: 2 }, (response) => {
+  return new Promise((resolve, reject) => client.emit("room:create", { name, capacity: CAPACITY } as never, (response: AckResponse<LobbyRoomSnapshot>) => {
     if (response.ok) resolve(response.data);
     else reject(new Error(response.error));
   }));
@@ -42,7 +67,7 @@ function call<T>(send: (ack: (response: AckResponse<T>) => void) => void): Promi
   return new Promise((resolve) => send(resolve));
 }
 
-function settings(client: TestSocket, value: Partial<RoomAccess>): Promise<AckResponse<void>> {
+function access(client: TestSocket, value: Partial<RoomAccess>): Promise<AckResponse<void>> {
   return call((ack) => client.emit("room:access", value, ack));
 }
 
@@ -50,13 +75,14 @@ function lobby(client: TestSocket): Promise<PublicRoomSummary[]> {
   return new Promise((resolve) => client.emit("lobby:get", (response) => resolve(response.ok ? response.data : [])));
 }
 
-function nextUpdate(client: TestSocket): Promise<LobbyRoomSnapshot> {
-  return new Promise((resolve) => client.once("room:updated", resolve));
-}
-
 /** 等到满足条件的那次房间更新（前面的操作可能还有更新在路上）。 */
 function updateWhere(client: TestSocket, test: (room: LobbyRoomSnapshot) => boolean): Promise<LobbyRoomSnapshot> {
   return new Promise((resolve) => {
+    const current = latest.get(client);
+    if (current && test(current)) {
+      resolve(current);
+      return;
+    }
     const handler = (room: LobbyRoomSnapshot) => {
       if (!test(room)) return;
       client.off("room:updated", handler);
@@ -68,6 +94,25 @@ function updateWhere(client: TestSocket, test: (room: LobbyRoomSnapshot) => bool
 
 function closed(client: TestSocket): Promise<string> {
   return new Promise((resolve) => client.once("room:closed", ({ reason }) => resolve(reason)));
+}
+
+function seatOf(client: TestSocket): string {
+  return latest.get(client)?.members.find((member) => member.id === client.id)?.playerId ?? "";
+}
+
+/** 用房间码把座位坐满，返回新加入的玩家。 */
+async function fillSeats(code: string, seated: number): Promise<TestSocket[]> {
+  const added: TestSocket[] = [];
+  for (let seat = seated; seat < CAPACITY; seat += 1) {
+    const client = await connect();
+    expect((await join(client, { name: nick("玩家"), code })).ok).toBe(true);
+    added.push(client);
+  }
+  return added;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 describe("观战和公开房间", () => {
@@ -89,89 +134,111 @@ describe("观战和公开房间", () => {
 
   it("新房间默认可观战、不公开；陌生人从列表只能观战，房主打开公开后才能坐下", async () => {
     const host = await connect();
-    const room = await create(host, "房主甲");
+    const hostName = nick("房主");
+    const room = await create(host, hostName);
     expect(room.access).toEqual({ allowSpectators: true, spectatorsSeeAll: false, open: false });
 
     const stranger = await connect();
-    const summary = (await lobby(stranger)).find((candidate) => candidate.players[0]?.name === "房主甲")!;
+    const strangerName = nick("路人");
+    const summary = (await lobby(stranger)).find((candidate) => candidate.players[0]?.name === hostName)!;
     expect(summary.open).toBe(false);
     expect(summary.allowSpectators).toBe(true);
 
-    const refused = await join(stranger, { name: "路人乙", roomId: summary.id });
-    expect(refused.ok).toBe(false);
+    expect((await join(stranger, { name: strangerName, roomId: summary.id })).ok).toBe(false);
 
-    const watching = await join(stranger, { name: "路人乙", roomId: summary.id, spectate: true });
-    expect(watching.ok && watching.data.spectators.map((spectator) => spectator.name)).toEqual(["路人乙"]);
+    const watching = await join(stranger, { name: strangerName, roomId: summary.id, spectate: true });
+    expect(watching.ok && watching.data.spectators.map((spectator) => spectator.name)).toEqual([strangerName]);
     // 从列表进来的看不到房间码，邀请制房间也不能坐下。
     expect(watching.ok && watching.data.code).toBe("");
     expect((await call<void>((ack) => stranger.emit("room:sit", ack))).ok).toBe(false);
     expect((await lobby(await connect())).find((candidate) => candidate.id === summary.id)?.spectators).toBe(1);
 
     // 观战的人不能开语音；能聊天，带「观战」标记。
-    expect((await call<unknown>((ack) => stranger.emit("voice:join", { muted: true }, ack))).ok).toBe(false);
-    const chatSeen = nextUpdate(host);
+    expect((await call<unknown>((ack) => stranger.emit("voice:join", { muted: true }, ack as never))).ok).toBe(false);
+    const chatSeen = updateWhere(host, (snapshot) => snapshot.chat.some((entry) => entry.message === "加油"));
     expect((await call<void>((ack) => stranger.emit("room:chat", { message: "加油" }, ack))).ok).toBe(true);
-    expect((await chatSeen).chat.at(-1)).toMatchObject({ name: "路人乙", spectator: true });
+    expect((await chatSeen).chat.at(-1)).toMatchObject({ name: strangerName, spectator: true });
 
     // 不是房主不能改设置；房主打开公开后，观战的人可以坐下。
-    expect((await settings(stranger, { open: true })).ok).toBe(false);
-    expect((await settings(host, { open: true })).ok).toBe(true);
-    const seated = updateWhere(host, (snapshot) => snapshot.members.length === 2);
+    expect((await access(stranger, { open: true })).ok).toBe(false);
+    expect((await access(host, { open: true })).ok).toBe(true);
+    const seated = updateWhere(host, (snapshot) => snapshot.members.some((member) => member.name === strangerName));
     expect((await call<void>((ack) => stranger.emit("room:sit", ack))).ok).toBe(true);
-    const afterSit = await seated;
-    expect(afterSit.members.map((member) => member.name)).toEqual(["房主甲", "路人乙"]);
-    expect(afterSit.spectators).toEqual([]);
+    expect((await seated).spectators).toEqual([]);
 
-    // 满座后列表加入会被拒；改回观战后空出座位，第三个人能从列表加入。
+    // 坐满后列表加入会被拒；改回观战后空出座位，第三个人能从列表加入。
+    await fillSeats(room.code, 2);
     const third = await connect();
-    expect((await join(third, { name: "路人丙", roomId: summary.id })).ok).toBe(false);
+    const thirdName = nick("路人");
+    expect((await join(third, { name: thirdName, roomId: summary.id })).ok).toBe(false);
     expect((await call<void>((ack) => stranger.emit("room:stand", ack))).ok).toBe(true);
-    const joined = await join(third, { name: "路人丙", roomId: summary.id });
-    expect(joined.ok && joined.data.members.map((member) => member.name)).toEqual(["房主甲", "路人丙"]);
+    const joined = await join(third, { name: thirdName, roomId: summary.id });
+    expect(joined.ok && joined.data.members.some((member) => member.name === thirdName)).toBe(true);
   });
 
-  it("对局中观战的人看不到手牌，房主打开「看手牌」后能看到；不能操作，随时能离开", async () => {
+  it("对局中观战默认只看公开信息，房主打开「看手牌」后能看到；不能操作，随时能离开", async () => {
     const host = await connect();
-    const room = await create(host, "玩家甲");
-    const guest = await connect();
-    expect((await join(guest, { name: "玩家乙", code: room.code })).ok).toBe(true);
+    const room = await create(host, nick("玩家"));
+    const players = [host, ...(await fillSeats(room.code, 1))];
     const viewer = await connect();
-    const invitedViewer = await join(viewer, { name: "看客丙", code: room.code, spectate: true });
-    expect(invitedViewer.ok && invitedViewer.data.code).toBe(room.code);
+    const invited = await join(viewer, { name: nick("看客"), code: room.code, spectate: true });
+    expect(invited.ok && invited.data.code).toBe(room.code);
 
-    const started = updateWhere(viewer, (snapshot) => snapshot.game !== undefined);
     expect((await call<LobbyRoomSnapshot>((ack) => host.emit("room:start", ack))).ok).toBe(true);
-    const view = await started;
-    expect(view.game?.players.every((player) => player.hand.length === 0)).toBe(true);
-    expect(view.game?.deck).toBeUndefined();
+    await updateWhere(viewer, (snapshot) => snapshot.game !== undefined);
+    for (const client of players) await updateWhere(client, (snapshot) => snapshot.game !== undefined);
 
-    const reveal = updateWhere(viewer, (snapshot) => snapshot.access.spectatorsSeeAll);
-    expect((await settings(host, { spectatorsSeeAll: true })).ok).toBe(true);
-    const godView = await reveal;
-    expect(godView.game?.players.every((player) => player.hand.length === player.handCount)).toBe(true);
-    expect(godView.game?.deck).toBeUndefined();
-    // 玩家自己看到的还是只有自己的手牌。
-    const hostView = await call<LobbyRoomSnapshot>((ack) => host.emit("game:command", { type: "END_TURN" }, ack));
-    if (hostView.ok) expect(hostView.data.game?.players.filter((player) => player.hand.length > 0).length).toBe(1);
+    // 先走几步，让场上有藏起来的牌。
+    for (let step = 0; step < STEPS; step += 1) {
+      const mover = players.find((client) => legalActions(latest.get(client)!.game!, seatOf(client)).length > 0);
+      if (!mover) break;
+      const action = legalActions(latest.get(mover)!.game!, seatOf(mover))[0]!;
+      const version = latest.get(viewer)!.game!.version;
+      expect((await call<LobbyRoomSnapshot>((ack) => mover.emit("game:command", action, ack))).ok).toBe(true);
+      await updateWhere(viewer, (snapshot) => snapshot.game!.version !== version);
+      await delay(20);
+    }
 
-    expect((await call<LobbyRoomSnapshot>((ack) => viewer.emit("game:command", { type: "DRAW_DECK" }, ack))).ok).toBe(false);
-    // 对局中玩家不能改成观战，列表加入只能观战。
-    expect((await call<void>((ack) => guest.emit("room:stand", ack))).ok).toBe(false);
+    const blind = latest.get(viewer)!.game!;
+    expect(blind.deck).toBeUndefined();
+    // 每位玩家自己看到的那一份里，自己身上的秘密。
+    const owners = players.reduce((total, client) => {
+      const game = latest.get(client)!.game!;
+      return total + secretsSeen({ ...game, players: game.players.filter((player) => player.id === seatOf(client)) });
+    }, 0);
+    if (HIDDEN_INFO) {
+      expect(owners).toBeGreaterThan(0);
+      expect(secretsSeen(blind)).toBeLessThan(owners);
+    }
+
+    expect((await access(host, { spectatorsSeeAll: true })).ok).toBe(true);
+    const godView = (await updateWhere(viewer, (snapshot) => snapshot.access.spectatorsSeeAll)).game!;
+    expect(godView.deck).toBeUndefined();
+    expect(secretsSeen(godView)).toBeGreaterThanOrEqual(owners);
+
+    // 观战的人发动作会被拒。
+    const anyAction = players.map((client) => legalActions(latest.get(client)!.game!, seatOf(client))[0]).find(Boolean);
+    if (anyAction) {
+      expect((await call<LobbyRoomSnapshot>((ack) => viewer.emit("game:command", anyAction, ack))).ok).toBe(false);
+    }
+    // 对局中玩家不能改成观战；观战的人随时能离开。
+    expect((await call<void>((ack) => players[1]!.emit("room:stand", ack))).ok).toBe(false);
     expect((await call<void>((ack) => viewer.emit("room:leave", ack))).ok).toBe(true);
   });
 
   it("房主关闭观战会把观战的人请出去；房间解散时观战的人也会收到通知", async () => {
     const host = await connect();
-    const room = await create(host, "玩家丁");
+    const room = await create(host, nick("玩家"));
     const viewer = await connect();
-    expect((await join(viewer, { name: "看客戊", code: room.code, spectate: true })).ok).toBe(true);
+    const viewerName = nick("看客");
+    expect((await join(viewer, { name: viewerName, code: room.code, spectate: true })).ok).toBe(true);
     const kicked = closed(viewer);
-    expect((await settings(host, { allowSpectators: false })).ok).toBe(true);
+    expect((await access(host, { allowSpectators: false })).ok).toBe(true);
     expect(await kicked).toContain("关闭了观战");
-    expect((await join(viewer, { name: "看客戊", code: room.code, spectate: true })).ok).toBe(false);
+    expect((await join(viewer, { name: viewerName, code: room.code, spectate: true })).ok).toBe(false);
 
-    expect((await settings(host, { allowSpectators: true })).ok).toBe(true);
-    expect((await join(viewer, { name: "看客戊", code: room.code, spectate: true })).ok).toBe(true);
+    expect((await access(host, { allowSpectators: true })).ok).toBe(true);
+    expect((await join(viewer, { name: viewerName, code: room.code, spectate: true })).ok).toBe(true);
     const dissolved = closed(viewer);
     expect((await call<void>((ack) => host.emit("room:dissolve", ack))).ok).toBe(true);
     expect(await dissolved).toContain("解散");
@@ -179,8 +246,9 @@ describe("观战和公开房间", () => {
 
   it("同名的人不能同时在房间里（座位和观战一起算）", async () => {
     const host = await connect();
-    const room = await create(host, "玩家己");
+    const hostName = nick("玩家");
+    const room = await create(host, hostName);
     const viewer = await connect();
-    expect((await join(viewer, { name: "玩家己", code: room.code, spectate: true })).ok).toBe(false);
+    expect((await join(viewer, { name: hostName, code: room.code, spectate: true })).ok).toBe(false);
   });
 });
