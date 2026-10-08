@@ -353,6 +353,8 @@ body { background: repeating-conic-gradient(#101729 0 25%, #0c1120 0 50%) 0 0 / 
   background: var(--panel); box-shadow: 0 0 0 var(--px) var(--edge), inset var(--px) var(--px) 0 0 var(--rim), 0 8px 0 0 rgba(0, 0, 0, 0.35);
 }
 .app-shell .game-room-popover .room-settings { margin-top: 0; }
+.app-shell .game-room-popover .panel-label { color: var(--text); font-size: 12px; font-weight: 400; }
+.app-shell .game-room-popover .panel-label > span { margin-left: 8px; color: var(--muted); }
 .app-shell .spectate-bar {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; background: var(--panel);
   box-shadow: 0 0 0 var(--px) var(--edge), inset var(--px) var(--px) 0 0 var(--gold-2), inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 var(--shade);
