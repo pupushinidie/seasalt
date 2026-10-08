@@ -295,6 +295,61 @@ button.ss-opp.pickable:hover { filter: brightness(1.15); }
 .app-shell .ss-chat .room-chat-heading { display: none; }
 .app-shell .ss-chat .room-chat-list { flex: 1; min-height: 60px; max-height: none; }
 
+/* ---------- 打出对子 / 被偷：面板右下角弹一下 ---------- */
+.ss-toast {
+  position: absolute;
+  z-index: 3;
+  right: 10px;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 12px 2px 4px;
+  color: #2a1c06;
+  background: var(--gold);
+  box-shadow: 0 0 0 var(--px) #04060c, inset 0 0 0 var(--px) #fff2b8;
+  pointer-events: none;
+  animation: ss-toast 2.2s steps(11, jump-end) both;
+}
+.ss-toast b { font-size: 24px; font-weight: 400; white-space: nowrap; }
+.ss-fx { display: block; flex: 0 0 72px; width: 72px; height: 72px; margin: -20px 0 -12px; background-repeat: no-repeat; background-size: calc(var(--frames) * 100%) 100%; image-rendering: pixelated; animation: ss-fx 0.8s steps(var(--frames), jump-none) 2; }
+@keyframes ss-fx { from { background-position: 0 0; } to { background-position: 100% 0; } }
+@keyframes ss-toast {
+  0% { opacity: 0; transform: translateY(calc(var(--px) * 6)); }
+  9% { opacity: 1; transform: none; }
+  82% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ---------- 宣告横幅 ---------- */
+.ss-banner {
+  position: absolute;
+  z-index: 6;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  min-width: min(560px, calc(100% - 40px));
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 18px 28px;
+  color: #fff;
+  background: #b8401c;
+  box-shadow: 0 0 0 var(--px) #04060c, inset 0 0 0 calc(var(--px) * 2) #ffb38a, 0 calc(var(--px) * 4) 0 rgba(4, 6, 12, 0.5);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  animation: ss-banner 2.4s steps(12, jump-end) both;
+}
+.ss-banner.stop { background: #1d6e3d; box-shadow: 0 0 0 var(--px) #04060c, inset 0 0 0 calc(var(--px) * 2) #9fe8b0, 0 calc(var(--px) * 4) 0 rgba(4, 6, 12, 0.5); }
+.ss-banner b { font-size: 36px; font-weight: 400; line-height: 1.2; text-shadow: calc(var(--px) * 2) calc(var(--px) * 2) 0 rgba(4, 6, 12, 0.6); }
+.ss-banner small { font-size: 12px; }
+@keyframes ss-banner {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(1.3); }
+  8% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  85% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 /* ---------- 每轮结算（盖在牌桌上） ---------- */
 .ss-summary {
   --rim: var(--gold);
@@ -328,7 +383,7 @@ button.ss-opp.pickable:hover { filter: brightness(1.15); }
 .ss-sum-total strong { width: 48px; color: var(--text); font-size: 24px; font-weight: 400; text-align: right; }
 .ss-bar { position: relative; flex: 1; height: 8px; background: var(--bg); box-shadow: 0 0 0 var(--px) var(--edge); }
 .ss-bar i { position: absolute; inset: 0 auto 0 0; background: var(--gold); }
-.app-shell .ss-summary footer .primary-button { display: flex; align-items: center; gap: 10px; min-height: 48px; margin: 0; padding: 0 24px; font-size: 24px; }
+.app-shell .ss-summary footer .primary-button { display: flex; flex: 0 0 auto; width: auto; align-items: center; gap: 10px; min-height: 48px; margin: 0; padding: 0 32px; font-size: 24px; }
 .app-shell .ss-summary footer .primary-button small { font-size: 12px; }
 
 /* ---------- 终局 ---------- */
@@ -525,6 +580,19 @@ button.ss-opp.pickable:hover { filter: brightness(1.15); }
 .ss-screen.mobile .ss-sum-total { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
-  .ss-card.fresh, .ss-pile.fresh .ss-card, .ss-call-chip { animation: none; }
+  .ss-card.fresh, .ss-pile.fresh .ss-card, .ss-call-chip, .ss-banner, .ss-fx { animation: none; }
+  .ss-toast { animation: ss-toast-still 2.2s steps(1, jump-end) both; }
+  @keyframes ss-toast-still { 0%, 90% { opacity: 1; } 100% { opacity: 0; } }
   .ss-hand > .ss-card { transition: none; }
 }
+
+/* 等候房间：牌一览（房间码下面） */
+.ss-room-cards { --rim: #3d5482; --shade: #080c17; margin-top: 16px; }
+.ss-room-cards h3 { margin: 0 0 10px; color: var(--text); font-family: inherit; font-size: 12px; font-weight: 400; }
+.ss-room-cards ul { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; margin: 0; padding: 0; list-style: none; }
+.ss-room-cards li { display: flex; min-width: 0; align-items: center; gap: 8px; }
+.ss-room-cards .ss-card.mini { --mw: 40px; }
+.ss-room-cards li > span { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.ss-room-cards b { color: var(--text); font-size: 12px; font-weight: 400; white-space: nowrap; }
+.ss-room-cards small { overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+@media (min-width: 760px) and (max-height: 820px) { .ss-room-cards .ss-card.mini { --mw: 36px; } .ss-room-cards ul { gap: 4px 10px; } }

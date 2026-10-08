@@ -17,7 +17,7 @@ import {
   type PairEffect,
   type Player,
 } from "@seasalt/game";
-import { art, CARD_COLORS, coverSize, seatColor } from "./art.js";
+import { art, CARD_COLORS, coverSize, FX_FRAMES, seatColor } from "./art.js";
 import { CARD_NAMES, CardBack, CardView, cardLabel, colorStyle } from "./cards.js";
 import GameRules from "./GameRules.js";
 import { socket } from "./socket.js";
@@ -119,6 +119,38 @@ function describeEvent(event: GameEvent, name: (id: string) => string, myId: str
     default:
       return null;
   }
+}
+
+/** 打出对子 / 被偷时，在那位玩家的面板上弹一下（小动画 + 一行字）。 */
+interface Toast {
+  readonly fx: "crab" | "boat" | "fish" | "shark";
+  readonly text: string;
+}
+
+const PAIR_TOAST: Record<PairEffect, Toast> = {
+  crab: { fx: "crab", text: "两只蟹！" },
+  boat: { fx: "boat", text: "两艘船！再来一回合" },
+  fish: { fx: "fish", text: "两条鱼！" },
+  steal: { fx: "shark", text: "鲨鱼出动！" },
+};
+
+function toastsFrom(events: readonly GameEvent[]): Map<string, Toast> {
+  const toasts = new Map<string, Toast>();
+  for (const event of events) {
+    if (event.type === "PlayedPair") toasts.set(event.player, PAIR_TOAST[event.effect]);
+    if (event.type === "Stole") toasts.set(event.from, { fx: "shark", text: "被偷走一张" });
+  }
+  return toasts;
+}
+
+function ToastView({ toast }: { toast: Toast | undefined }) {
+  if (!toast) return null;
+  return (
+    <span className="ss-toast" aria-hidden="true">
+      <span className="ss-fx" style={{ backgroundImage: `url(${art.fx(toast.fx)})`, "--frames": FX_FRAMES } as CSSProperties} />
+      <b>{toast.text}</b>
+    </span>
+  );
 }
 
 /** 这次操作里，我看得到的新进手牌（翻牌动画用）和新打出的对子。 */
@@ -243,6 +275,7 @@ function OpponentPanel({
   index,
   online,
   fresh,
+  toast,
   stealable,
   onSteal,
 }: {
@@ -250,6 +283,7 @@ function OpponentPanel({
   index: number;
   online: boolean;
   fresh: Fresh;
+  toast: Toast | undefined;
   stealable: boolean;
   onSteal: () => void;
 }) {
@@ -297,6 +331,7 @@ function OpponentPanel({
         {player.revealed && <ColorCounts points={points} />}
       </footer>
       {stealable && <span className="ss-pick-hint">偷他一张</span>}
+      <ToastView key={game.version} toast={toast} />
     </>
   );
   const style = { "--seat": seatColor(player.color) } as CSSProperties;
@@ -348,6 +383,7 @@ function GameBoard({ room, busy, error, notice, brand, connection, theme, themeT
     () => (game.version === firstVersion.current ? { cards: new Set(), piles: new Set() } : freshFrom(game.events, myId)),
     [game.version],
   );
+  const toasts = useMemo(() => (game.version === firstVersion.current ? new Map<string, Toast>() : toastsFrom(game.events)), [game.version]);
 
   // 对手：从自己的下一位开始按座位顺序。
   const opponents = useMemo(() => {
@@ -534,6 +570,20 @@ function GameBoard({ room, busy, error, notice, brand, connection, theme, themeT
   const handStep = !sizes.mobile && hand.length > 1 && natural > handWidth ? Math.max(28, (handWidth - handCard) / (hand.length - 1)) : handCard + handGap;
 
   const crabCards = myMove && stage === "crabPick" && game.crabPile !== null ? game.discards[game.crabPile as 0 | 1] : [];
+
+  // 宣告横幅：只在这次操作里有人宣告时出现（刚进房间 / 重连不弹），2.4 秒后自己消失。
+  const announcement = useMemo(() => {
+    if (game.version === firstVersion.current) return null;
+    const event = game.events.find((item) => item.type === "Announced");
+    return event?.type === "Announced" ? event : null;
+  }, [game.version]);
+  const [bannerOn, setBannerOn] = useState(false);
+  useEffect(() => {
+    if (!announcement) return;
+    setBannerOn(true);
+    const timer = window.setTimeout(() => setBannerOn(false), 2400);
+    return () => window.clearTimeout(timer);
+  }, [announcement]);
   const callChip = game.call && playing && stage !== "roundEnd"
     ? `${nameOf(game.players[game.call.player]!.id)}宣告了${game.call.kind === "lastChance" ? "最后机会" : "STOP"}`
     : null;
@@ -601,6 +651,7 @@ function GameBoard({ room, busy, error, notice, brand, connection, theme, themeT
                 index={index}
                 online={online(game.players[index]!.id)}
                 fresh={fresh}
+                toast={toasts.get(game.players[index]!.id)}
                 stealable={thieves.includes(index)}
                 onSteal={() => send({ type: "STEAL", target: game.players[index]!.id })}
               />
@@ -698,6 +749,7 @@ function GameBoard({ room, busy, error, notice, brand, connection, theme, themeT
                 )}
                 <span className="ss-opp-score ss-me-total"><b>{me.score}</b><small>总分</small></span>
               </header>
+              <ToastView key={game.version} toast={toasts.get(me.id)} />
               <div className="ss-me-played">
                 {me.played.length > 0 ? <PlayedPairs pairs={me.played} fresh={fresh} /> : <span className="ss-muted">打出的对子摆在这里</span>}
               </div>
@@ -719,6 +771,13 @@ function GameBoard({ room, busy, error, notice, brand, connection, theme, themeT
                 })}
               </div>
             </section>
+          )}
+
+          {bannerOn && announcement && (
+            <div className={`ss-banner ${announcement.call}`} role="status">
+              <b>{announcement.player === myId ? "你" : nameOf(announcement.player)}宣告{announcement.call === "stop" ? " STOP！" : "最后机会！"}</b>
+              <small>{announcement.call === "stop" ? "本轮立刻结束，每人拿卡牌分" : `卡牌分 ${announcement.points}，赌自己最高；其他人各打最后一回合`}</small>
+            </div>
           )}
 
           {stage === "roundEnd" && playing && !hideSummary && (

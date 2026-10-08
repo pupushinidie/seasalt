@@ -38,7 +38,7 @@ export const palette: DayPalette = {
     // 大标题的投影：夜间是黑色，白底上换成浅金色
     "calc(var(--px) * 2) calc(var(--px) * 2) 0 var(--edge)": "calc(var(--px) * 2) calc(var(--px) * 2) 0 #f0d890",
   },
-  keep: ["ss-card", "ss-color", "ss-swatch", "ss-card-badge", "ss-stop", "ss-last", "ss-call-chip", "ss-pick-hint"],
+  keep: ["ss-card", "ss-color", "ss-swatch", "ss-card-badge", "ss-stop", "ss-last", "ss-call-chip", "ss-pick-hint", "ss-banner", "ss-toast"],
   textVarColors: {
     "--gold": "#94650a",
     "--gold-2": "#94650a",

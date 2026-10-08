@@ -35,12 +35,16 @@ def trim(img: Image.Image, pad: int = 0) -> Image.Image:
     return img.crop((max(0, left - pad), max(0, top - pad), min(img.width, right + pad), min(img.height, bottom + pad)))
 
 
-def outline(img: Image.Image, white: int = 2, dark: int = 1, dark_color=(36, 40, 52, 255)) -> Image.Image:
-    """返回同尺寸的图：原图 + 外圈白边 + 最外圈深色细边。原图边上要留够空位。"""
+def outline(img: Image.Image, white: int = 2, dark: int = 1, dark_color=(36, 40, 52, 255), merge: int = 0) -> Image.Image:
+    """返回同尺寸的图：原图 + 外圈白边 + 最外圈深色细边。原图边上要留够空位。
+    merge > 0 时先把相距不到 2×merge 像素的几块连成一整块（鱼群、企鹅群这种一群的图，整体描一圈，不会碎成好几块）。"""
     img = img.convert("RGBA")
     alpha = img.getchannel("A").point(lambda a: 255 if a > 40 else 0)
-    inner = _grow(alpha, white)
-    outer = _grow(alpha, white + dark)
+    shape = alpha
+    if merge > 0:
+        shape = _grow(alpha, merge).filter(ImageFilter.MinFilter(merge * 2 + 1))
+    inner = _grow(shape, white)
+    outer = _grow(shape, white + dark)
     result = Image.new("RGBA", img.size, (0, 0, 0, 0))
     result.paste(Image.new("RGBA", img.size, dark_color), mask=outer)
     result.paste(Image.new("RGBA", img.size, (255, 255, 255, 255)), mask=inner)

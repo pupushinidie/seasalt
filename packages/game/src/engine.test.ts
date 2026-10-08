@@ -649,7 +649,11 @@ function randomGame(seed: number, count: number): GameState {
       const actions = legalActions(state, actor.id);
       if (actions.length === 0) throw new Error(`没有可做的操作：${state.stage}`);
       // 偏向打对子、少宣告，让对局长一点。
-      const weighted = actions.flatMap((action) => (action.type === "PLAY_PAIR" ? [action, action] : action.type === "STOP" || action.type === "LAST_CHANCE" ? (rng.next() < 0.3 ? [action] : []) : [action]));
+      const weighted: GameCommand[] = actions.flatMap((action): GameCommand[] => {
+        if (action.type === "PLAY_PAIR") return [action, action];
+        if (action.type === "STOP" || action.type === "LAST_CHANCE") return rng.next() < 0.3 ? [action] : [];
+        return [action];
+      });
       state = applyCommand(state, actor.id, rng.pick(weighted.length > 0 ? weighted : actions));
     }
     state.players.forEach((player, index) => {

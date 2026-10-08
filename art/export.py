@@ -47,11 +47,16 @@ def place(img: Image.Image, size: int) -> Image.Image:
     return canvas
 
 
+# 一群的图（几块分开的）整体描一圈白边
+MERGE = {"card-shoal": 4, "card-colony": 3}
+
+
 def card_art(source: pathlib.Path, name: str) -> None:
     sprite = sticker.trim(Image.open(source).convert("RGBA"))
-    big = sticker.outline(place(sprite, 72), white=2, dark=1)
+    merge = MERGE.get(name, 0)
+    big = sticker.outline(place(sprite, 72), white=2, dark=1, merge=merge)
     big.save(TARGET / f"{name}.png")
-    small = sticker.outline(place(half(sprite), 36), white=1, dark=1)
+    small = sticker.outline(place(half(sprite), 36), white=1, dark=1, merge=(merge + 1) // 2)
     small.save(TARGET / f"{name}-sm.png")
 
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
-import { CAPACITY_OPTIONS, type Capacity, type Card, type GameCommand, type LobbyRoomSnapshot, type PublicRoomSummary } from "@seasalt/game";
+import { CAPACITY_OPTIONS, CARD_LIST, CARD_TYPES, defaultTarget, type Capacity, type Card, type GameCommand, type LobbyRoomSnapshot, type PublicRoomSummary } from "@seasalt/game";
 import { art, seatColor } from "./art.js";
-import { CardView } from "./cards.js";
+import { CARD_HINTS, CARD_NAMES, CardView } from "./cards.js";
 import { useConfirm } from "./confirm.js";
 import GameBoard from "./GameBoard.js";
 import GameRules from "./GameRules.js";
@@ -370,6 +370,26 @@ function App() {
   );
 }
 
+/** 等候房间里的牌一览：14 种牌、各几张、怎么算分。 */
+function CardList() {
+  return (
+    <div className="ss-room-cards">
+      <h3>牌一览（共 58 张）</h3>
+      <ul>
+        {CARD_TYPES.map((type) => (
+          <li key={type}>
+            <CardView card={{ type, color: CARD_LIST[type][0]! }} className="mini" />
+            <span>
+              <b>{CARD_NAMES[type]} ×{CARD_LIST[type].length}</b>
+              <small>{CARD_HINTS[type]}</small>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function Brand() {
   return (
     <a className="brand" href={import.meta.env.BASE_URL} aria-label="海盐与纸首页">
@@ -439,6 +459,7 @@ function RoomView({
               {room.code}<span aria-hidden="true">⧉</span>
             </button>
             <div className="room-code-caption">点击复制 · 6 位邀请代码</div>
+            <CardList />
           </section>
 
           <section className="room-panel player-panel">
@@ -470,7 +491,10 @@ function RoomView({
                 </div>
               ))}
             </div>
-            <p className="field-hint">每个决定限时 45 秒，超时自动处理（拿牌时从牌堆摸、出牌时直接结束回合）；轮到的人离线只等 3 秒。目标分 2 人 40、3 人 35、4 人 30，到了的那一轮打完，总分最高者获胜。</p>
+            <p className="field-hint">
+              现在 {room.members.length} 人{room.members.length >= 2 ? `，目标 ${defaultTarget(room.members.length)} 分` : ""}（2 人 40、3 人 35、4 人 30），到了的那一轮打完，总分最高者获胜。
+              每个决定限时 45 秒，超时自动处理（拿牌时从牌堆摸、出牌时直接结束回合）；轮到的人离线只等 3 秒。
+            </p>
             <div className="room-actions">
               {isHost ? (
                 <button className="primary-button" type="button" onClick={onStart} disabled={busy || room.members.length < 2}>

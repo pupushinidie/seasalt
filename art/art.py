@@ -36,10 +36,14 @@ CREATURES: dict[str, str] = {
     "shoal": "a school of five small silver-blue fish swimming together in a curve",
     "colony": "a group of three cute penguins standing close together on a small ice floe",
     "captain": "an old sea captain with a white captain hat, white beard and a pipe, navy coat, upper body, front view",
+    # 第一版红发青尾太像某部动画电影的人鱼公主，换掉发色、鱼尾和上衣
+    "mermaid2": "a cute mermaid girl with short wavy dark brown hair and a coral pink fish tail, a small yellow starfish clip in her hair, white top, sitting and waving, full body",
 }
 
 # 32px 小图（一次 64 个候选）
 ICONS: dict[str, str] = {
+    "icon-stop": "game icon: a raised open hand palm facing forward, stop gesture, simple white glove with dark outline",
+    "icon-last": "game icon: a small golden hourglass with blue sand running down",
     "avatar": "cute round seaside animal face portrait for a game avatar, front view, big eyes, head only, seagull or seal or turtle or starfish or crab",
     "emblem": "a round white seashell emblem medallion on a deep blue wave badge, symmetric, front view",
 }

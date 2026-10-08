@@ -5,5 +5,15 @@
   "card-shark": "out/r1/shark/shark.png",
   "card-swimmer": "out/r1/swimmer/swimmer.png",
   "card-shell": "out/r1/shell/shell-7.png",
-  "card-octopus": "out/r1/octopus/octopus-9.png"
+  "card-octopus": "out/r1/octopus/octopus-9.png",
+  "card-penguin": "out/r1/penguin/penguin-3.png",
+  "card-sailor": "out/r1/sailor/sailor.png",
+  "card-lighthouse": "out/r1/lighthouse/lighthouse.png",
+  "card-shoal": "out/r1/shoal/shoal-6.png",
+  "card-colony": "out/r1/colony/colony-2.png",
+  "card-captain": "out/r1/captain/captain-15.png",
+  "avatar-0": "out/r1/avatar/avatar-3.png",
+  "avatar-1": "out/r1/avatar/avatar-26.png",
+  "avatar-2": "out/r1/avatar/avatar-2.png",
+  "avatar-3": "out/r1/avatar/avatar-13.png"
 }

@@ -13,9 +13,17 @@ export const art = {
   /** 每种牌的小图（72px 画布，白描边已经画好；-sm 是缩一半的 36px 版，小牌用）。 */
   card: (type: CardType) => `${BASE}card-${type}.png`,
   cardSmall: (type: CardType) => `${BASE}card-${type}-sm.png`,
+  /** 对子效果的小动画：横排帧条，每帧 72px（见 art/export.py 的 FX）。 */
+  fx: (name: "crab" | "boat" | "fish" | "shark" | "mermaid") => `${BASE}fx-${name}.png`,
+  /** STOP / 最后机会的图标（32px）。 */
+  iconStop: `${BASE}icon-stop.png`,
+  iconLast: `${BASE}icon-last.png`,
   /** 座位头像 0–3（32px）。 */
   avatar: (index: number) => `${BASE}avatar-${index % 4}.png`,
 };
+
+/** 动画帧条的帧数（和 art/export.py 一致）。 */
+export const FX_FRAMES = 8;
 
 /** 座位色：4 种，开局按入座顺序分。 */
 export const SEAT_COLORS = ["#ef6b57", "#3f8fe8", "#47b968", "#f0b53a"] as const;
