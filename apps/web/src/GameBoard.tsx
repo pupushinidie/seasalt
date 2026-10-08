@@ -905,11 +905,13 @@ function GameBoard({ room, busy, error, notice, brand, connection, theme, themeT
                 })}
               </div>
             )}
-            {stage === "roundEnd" && playing && !spectating && (
+            {stage === "roundEnd" && playing && (!spectating || hideSummary) && (
               <div className="ss-buttons">
-                <button className="primary-button" type="button" disabled={busy || game.ready.includes(myId)} onClick={() => send({ type: "READY" })}>
-                  {game.ready.includes(myId) ? "已准备" : "下一轮"}<small>N</small>
-                </button>
+                {!spectating && (
+                  <button className="primary-button" type="button" disabled={busy || game.ready.includes(myId)} onClick={() => send({ type: "READY" })}>
+                    {game.ready.includes(myId) ? "已准备" : "下一轮"}<small>N</small>
+                  </button>
+                )}
                 {hideSummary && <button className="quiet-button" type="button" onClick={() => setHideSummary(false)}>看结算</button>}
               </div>
             )}
