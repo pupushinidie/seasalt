@@ -1,67 +1,49 @@
-/** 美术资源（art/export.py 导出到 public/art/）、座位色和数字牌的颜色。 */
+import type { CardColor, CardType } from "@seasalt/game";
+
+/** 美术资源（art/export.py 导出到 public/art/）、座位色和牌的颜色。 */
 const BASE = `${import.meta.env.BASE_URL}art/`;
 
 export const art = {
   hero: `${BASE}hero.png`,
-  /** 牌桌背景，按房间码选一张。 */
-  backdrops: [`${BASE}backdrop-1.png`, `${BASE}backdrop-2.png`, `${BASE}backdrop-3.png`],
-  /** 32px 小图标：行动牌、修饰牌、爆掉、翻七、牌背徽记。 */
-  freeze: `${BASE}freeze.png`,
-  flipThree: `${BASE}flip3.png`,
-  secondChance: `${BASE}second.png`,
-  coins: `${BASE}coins.png`,
-  double: `${BASE}double.png`,
-  bust: `${BASE}bust.png`,
-  flip7: `${BASE}flip7.png`,
+  /** 牌桌：白天是晴天沙滩，夜间是月光沙滩。 */
+  beachDay: `${BASE}beach-day.png`,
+  beachNight: `${BASE}beach-night.png`,
+  /** 牌背中间的徽记（32px）。 */
   emblem: `${BASE}emblem.png`,
-  /** 座位头像 0–9（32px）。 */
-  avatar: (index: number) => `${BASE}avatar-${index % 10}.png`,
-  /** 爆掉的爆炸烟雾、翻七的奖杯烟花：横排帧条，每帧 64px（见 art/export.py）。 */
-  bustFx: `${BASE}fx-bust.png`,
-  flip7Fx: `${BASE}fx-flip7.png`,
+  /** 每种牌的小图（72px 画布，白描边已经画好；-sm 是缩一半的 36px 版，小牌用）。 */
+  card: (type: CardType) => `${BASE}card-${type}.png`,
+  cardSmall: (type: CardType) => `${BASE}card-${type}-sm.png`,
+  /** 座位头像 0–3（32px）。 */
+  avatar: (index: number) => `${BASE}avatar-${index % 4}.png`,
 };
 
-/** 动画帧条的帧数（和 art/export.py 一致）。 */
-export const FX_FRAMES = { bust: 10, flip7: 9 } as const;
-
-/** 座位色：10 种，开局按入座顺序分。 */
-export const SEAT_COLORS = [
-  "#e5533f", // 红
-  "#3b82f0", // 蓝
-  "#44b860", // 绿
-  "#f0c030", // 黄
-  "#a35ee8", // 紫
-  "#f08a2e", // 橙
-  "#2ec4c4", // 青
-  "#ef6fb0", // 粉
-  "#9ccc3a", // 黄绿
-  "#c8ccd6", // 银
-] as const;
+/** 座位色：4 种，开局按入座顺序分。 */
+export const SEAT_COLORS = ["#ef6b57", "#3f8fe8", "#47b968", "#f0b53a"] as const;
 
 export function seatColor(index: number): string {
   return SEAT_COLORS[index % SEAT_COLORS.length]!;
 }
 
-/** 数字牌 0–12 的数字颜色（米色牌面上要看得清，相邻数字颜色不同）。 */
-export const NUMBER_COLORS = [
-  "#5f6b7a", // 0 灰
-  "#8a5a2b", // 1 棕
-  "#c8322c", // 2 红
-  "#d9631c", // 3 橙
-  "#a8820c", // 4 土黄
-  "#5c8a1e", // 5 草绿
-  "#1d8a4a", // 6 绿
-  "#0f8078", // 7 青
-  "#1f63a8", // 8 蓝
-  "#3a3fa8", // 9 靛
-  "#7a3aa8", // 10 紫
-  "#b02f7f", // 11 洋红
-  "#b8121f", // 12 深红
-] as const;
+/**
+ * 牌的 11 种颜色：牌面整张就是这个颜色。偏清爽，但相邻的几种（深蓝 / 黑、浅橙 / 粉 / 橙、灰 / 白）要分得开。
+ * ink 是牌上的字色（深底白字、浅底深字），edge 是牌面内圈的描边色。
+ */
+export const CARD_COLORS: Readonly<Record<CardColor, { readonly name: string; readonly bg: string; readonly ink: string; readonly edge: string }>> = {
+  darkBlue: { name: "深蓝", bg: "#2f5fae", ink: "#ffffff", edge: "#1d3f7a" },
+  lightBlue: { name: "浅蓝", bg: "#7fcdf0", ink: "#0f3550", edge: "#4ea8d4" },
+  black: { name: "黑", bg: "#2b2f38", ink: "#ffffff", edge: "#14161b" },
+  yellow: { name: "黄", bg: "#f6d24c", ink: "#4a3806", edge: "#d6aa1c" },
+  green: { name: "绿", bg: "#5cbb6c", ink: "#0d3a18", edge: "#3a9350" },
+  white: { name: "白", bg: "#f8f5ee", ink: "#3a4252", edge: "#d2ccbe" },
+  purple: { name: "紫", bg: "#9b80d8", ink: "#ffffff", edge: "#6f55b0" },
+  gray: { name: "灰", bg: "#a6aeb8", ink: "#24292f", edge: "#7d8792" },
+  lightOrange: { name: "浅橙", bg: "#f9c597", ink: "#5a2e0c", edge: "#e09a5e" },
+  pink: { name: "粉", bg: "#f5a5c2", ink: "#5a1830", edge: "#d8729a" },
+  orange: { name: "橙", bg: "#f0802e", ink: "#ffffff", edge: "#c45a10" },
+};
 
-/** 按房间码选背景，同一个房间每次一样。 */
-export function backdropFor(code: string): string {
-  let hash = 0;
-  for (const char of code) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
-  return art.backdrops[hash % art.backdrops.length]!;
+/** 背景图 512×288，按整数倍放大到盖满一块区域。 */
+export function coverSize(width: number, height: number): string {
+  const scale = Math.max(1, Math.ceil(Math.max(width / 512, height / 288)));
+  return `${512 * scale}px ${288 * scale}px`;
 }

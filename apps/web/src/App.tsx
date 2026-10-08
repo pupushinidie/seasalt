@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
-import { CAPACITY_OPTIONS, type Capacity, type GameCommand, type LobbyRoomSnapshot, type PublicRoomSummary } from "@seasalt/game";
+import { CAPACITY_OPTIONS, type Capacity, type Card, type GameCommand, type LobbyRoomSnapshot, type PublicRoomSummary } from "@seasalt/game";
 import { art, seatColor } from "./art.js";
 import { CardView } from "./cards.js";
 import { useConfirm } from "./confirm.js";
@@ -15,6 +15,16 @@ type EntryMode = "create" | "join";
 
 const validRoomCode = /^[A-HJ-NP-Z2-9]{6}$/;
 
+/** 首页摆的几张牌。 */
+const SHOWCASE: Pick<Card, "type" | "color">[] = [
+  { type: "crab", color: "darkBlue" },
+  { type: "boat", color: "yellow" },
+  { type: "fish", color: "lightBlue" },
+  { type: "shell", color: "green" },
+  { type: "mermaid", color: "white" },
+  { type: "penguin", color: "pink" },
+];
+
 // 线上游戏中心在站点根路径；本地开发时跑在 5175 端口。
 const CENTER_URL = import.meta.env.DEV ? `${window.location.protocol}//${window.location.hostname}:5175/` : "/";
 
@@ -26,7 +36,6 @@ function App() {
   const [mode, setMode] = useState<EntryMode>("create");
   const [name, setName] = useState("");
   const [capacity, setCapacity] = useState<Capacity>(4);
-  const [brutal, setBrutal] = useState(true);
   const [confirmAction, confirmDialog] = useConfirm();
   // 白天 / 夜间画面：首页、等候房间、牌桌共用，顶栏按钮随时切换；和游戏中心、其他游戏共用同一个选择。
   const [theme, toggleTheme] = useTheme();
@@ -110,7 +119,7 @@ function App() {
     };
 
     if (mode === "create") {
-      socket.emit("room:create", { name: nickname, capacity, brutal }, complete);
+      socket.emit("room:create", { name: nickname, capacity }, complete);
     } else {
       socket.emit("room:join", { name: nickname, code: roomCode }, complete);
     }
@@ -167,7 +176,6 @@ function App() {
   }
 
   const kickMember = (memberId: string) => roomCommand((ack) => socket.emit("room:kick", memberId, ack));
-  const changeBrutal = (value: boolean) => roomCommand((ack) => socket.emit("room:settings", { brutal: value }, ack));
   const voteRematch = (accept: boolean) => roomCommand((ack) => socket.emit("room:rematch", accept, ack));
   async function dissolveRoom() {
     const ok = await confirmAction({
@@ -190,7 +198,7 @@ function App() {
 
   if (room?.status === "playing" && room.game) {
     return (
-      <main className="app-shell f7-game">
+      <main className="app-shell ss-game">
         <GameBoard
           room={room}
           busy={busy}
@@ -198,6 +206,7 @@ function App() {
           notice={notice}
           brand={<Brand />}
           connection={<ConnectionStatus connected={connected} />}
+          theme={theme}
           themeToggle={themeToggle}
           chat={<RoomChat room={room} voice={voice} />}
           onCommand={submitGameCommand}
@@ -211,12 +220,12 @@ function App() {
 
   if (room) {
     return (
-      <main className="app-shell f7-room">
+      <main className="app-shell ss-room">
         <header className="topbar">
           <Brand />
           <div className="topbar-right">
             {themeToggle}
-            <GameRules brutal={room.brutal} />
+            <GameRules />
             <ConnectionStatus connected={connected} />
           </div>
         </header>
@@ -230,7 +239,6 @@ function App() {
           onStart={startGame}
           onKick={kickMember}
           onDissolve={dissolveRoom}
-          onBrutal={changeBrutal}
           chat={<RoomChat room={room} voice={voice} />}
         />
         {confirmDialog}
@@ -239,7 +247,7 @@ function App() {
   }
 
   return (
-    <main className="app-shell f7-home">
+    <main className="app-shell ss-home">
       <header className="topbar">
         <Brand />
         <div className="topbar-right">
@@ -252,22 +260,19 @@ function App() {
 
       <section className="welcome-grid">
         <div className="welcome-copy">
-          <div className="eyebrow"><span className="eyebrow-line" /> 在线对战 · 3–10 人 · 测试版</div>
-          <h1>翻七</h1>
+          <div className="eyebrow"><span className="eyebrow-line" /> 在线对战 · 2–4 人 · 测试版</div>
+          <h1>海盐与纸</h1>
           <p className="welcome-description">
-            一轮一轮地翻牌：每次决定再要一张，还是见好就收。翻到和面前重复的数字就爆掉，这一轮白干；
-            凑齐 7 张不同的数字就是「翻七」，额外 +15。冻结、翻三、二次机会可以塞给别人。先到 200 分的那一轮打完，总分最高的人获胜。
+            在海边收集卡牌：每回合摸两张留一张，或者捡别人丢下的牌。凑对子打出来能换效果——蟹翻弃牌堆、船再来一回合、鱼多摸一张、鲨鱼配泳者偷对手一张。
+            卡牌分到 7 就能喊停：稳稳地 STOP，或者赌一把「最后机会」。先到目标分的那一轮打完，总分最高的人获胜。
           </p>
-          <img className="f7-hero" src={art.hero} alt="" />
-          <div className="f7-showcase" aria-hidden="true">
-            {[1, 4, 7, 9, 12].map((value) => <CardView key={value} card={{ kind: "number", value }} />)}
-            <CardView card={{ kind: "plus", value: 8 }} />
-            <CardView card={{ kind: "freeze", value: 0 }} />
-            <CardView card={{ kind: "secondChance", value: 0 }} />
+          <img className="ss-hero" src={art.hero} alt="" />
+          <div className="ss-showcase" aria-hidden="true">
+            {SHOWCASE.map((card) => <CardView key={`${card.type}-${card.color}`} card={card} />)}
           </div>
         </div>
 
-        <div className="f7-home-side">
+        <div className="ss-home-side">
           <section className="entry-card" aria-labelledby="entry-title">
             <div className="entry-card-heading">
               <div>
@@ -315,7 +320,7 @@ function App() {
               {mode === "create" ? (
                 <>
                   <label className="field-label field-label-spaced" htmlFor="room-capacity">房间人数</label>
-                  <div className="capacity-options f7-seats-pick" id="room-capacity" role="group" aria-label="选择房间人数">
+                  <div className="capacity-options ss-seats-pick" id="room-capacity" role="group" aria-label="选择房间人数">
                     {CAPACITY_OPTIONS.map((seats) => (
                       <button
                         key={seats}
@@ -329,9 +334,7 @@ function App() {
                       </button>
                     ))}
                   </div>
-                  <label className="field-label field-label-spaced" htmlFor="room-mode">玩法</label>
-                  <BrutalOptions id="room-mode" value={brutal} onChange={setBrutal} />
-                  <p className="field-hint">至少 3 位玩家后，房主即可开始。</p>
+                  <p className="field-hint">2 人目标 40 分、3 人 35 分、4 人 30 分。至少 2 位玩家后，房主即可开始。</p>
                 </>
               ) : (
                 <>
@@ -367,34 +370,11 @@ function App() {
   );
 }
 
-function BrutalOptions({ id, value, onChange, disabled = false }: { id?: string; value: boolean; onChange: (value: boolean) => void; disabled?: boolean }) {
-  return (
-    <div className="capacity-options f7-mode-options" id={id} role="group" aria-label="选择玩法">
-      {[
-        { brutal: true, title: "残酷模式", note: "修饰牌能塞给别人，翻七可罚人 −15" },
-        { brutal: false, title: "普通模式", note: "修饰牌自己拿，翻七 +15" },
-      ].map((option) => (
-        <button
-          key={option.title}
-          type="button"
-          disabled={disabled}
-          className={value === option.brutal ? "capacity-option selected" : "capacity-option"}
-          aria-pressed={value === option.brutal}
-          onClick={() => onChange(option.brutal)}
-        >
-          <strong>{option.title}</strong>
-          <span>{option.note}</span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function Brand() {
   return (
-    <a className="brand" href={import.meta.env.BASE_URL} aria-label="翻七首页">
+    <a className="brand" href={import.meta.env.BASE_URL} aria-label="海盐与纸首页">
       <span className="brand-mark" aria-hidden="true"><i /><i /><i /></span>
-      <span className="brand-name">翻七<span> PUSH YOUR LUCK</span></span>
+      <span className="brand-name">海盐与纸<span> SEASIDE CARDS</span></span>
     </a>
   );
 }
@@ -418,7 +398,6 @@ function RoomView({
   onStart,
   onKick,
   onDissolve,
-  onBrutal,
   chat,
 }: {
   room: LobbyRoomSnapshot;
@@ -430,7 +409,6 @@ function RoomView({
   onStart: () => void;
   onKick: (memberId: string) => void;
   onDissolve: () => void;
-  onBrutal: (value: boolean) => void;
   chat: ReactNode;
 }) {
   const currentMember = room.members.find((member) => member.id === socket.id);
@@ -468,10 +446,10 @@ function RoomView({
               <div className="panel-label">玩家 <span>{room.members.length} / {room.capacity}</span></div>
               <span className="waiting-pill"><i /> 等待中</span>
             </div>
-            <div className={room.capacity > 5 ? "player-list f7-two-cols" : "player-list"}>
+            <div className="player-list">
               {room.members.map((member, index) => (
                 <div className="player-row" key={member.id}>
-                  <div className="player-avatar f7-member-avatar" style={{ background: seatColor(index) } as CSSProperties}>
+                  <div className="player-avatar ss-member-avatar" style={{ background: seatColor(index) } as CSSProperties}>
                     <img src={art.avatar(index)} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} />
                     <span>{member.name.slice(0, 1).toUpperCase()}</span>
                   </div>
@@ -492,23 +470,19 @@ function RoomView({
                 </div>
               ))}
             </div>
-            <div className="f7-room-mode">
-              <span className="field-label">玩法{isHost ? "（房主可改）" : ""}</span>
-              <BrutalOptions value={room.brutal} onChange={onBrutal} disabled={!isHost} />
-            </div>
-            <p className="field-hint">每个决定限时 30 秒，超时自动停牌；先到 200 分的那一轮打完，总分最高者获胜。</p>
+            <p className="field-hint">每个决定限时 45 秒，超时自动处理（拿牌时从牌堆摸、出牌时直接结束回合）；轮到的人离线只等 3 秒。目标分 2 人 40、3 人 35、4 人 30，到了的那一轮打完，总分最高者获胜。</p>
             <div className="room-actions">
               {isHost ? (
-                <button className="primary-button" type="button" onClick={onStart} disabled={busy || room.members.length < 3}>
+                <button className="primary-button" type="button" onClick={onStart} disabled={busy || room.members.length < 2}>
                   {busy ? <><span className="spinner" /> 正在开始</> : "开始对局"}<span aria-hidden="true">↗</span>
                 </button>
               ) : (
                 <div className="host-wait-note"><span className="pulse-dot" /> 等待房主开始对局</div>
               )}
-              {isHost && room.members.length < 3 && <p className="field-hint centered">还需要至少 {3 - room.members.length} 位玩家加入。</p>}
+              {isHost && room.members.length < 2 && <p className="field-hint centered">还需要至少 {2 - room.members.length} 位玩家加入。</p>}
             </div>
           </section>
-          <div className="f7-room-chat">{chat}</div>
+          <div className="ss-room-chat">{chat}</div>
         </div>
       ) : null}
 

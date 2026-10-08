@@ -1,19 +1,27 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
-  bustChance,
-  scorePlayer,
-  targetsFor,
+  canDeclare,
+  cardPoints,
+  COLORS,
+  discardOptions,
+  playablePairs,
+  pointsOf,
+  sortCards,
+  stealTargets,
   type Card,
+  type CardPoints,
   type GameCommand,
   type GameEvent,
   type GameState,
   type LobbyRoomSnapshot,
+  type PairEffect,
   type Player,
 } from "@seasalt/game";
-import { art, backdropFor, FX_FRAMES, seatColor } from "./art.js";
-import { ACTION_HELP, CardBack, CardView, cardIcon, cardName } from "./cards.js";
+import { art, CARD_COLORS, coverSize, seatColor } from "./art.js";
+import { CARD_NAMES, CardBack, CardView, cardLabel, colorStyle } from "./cards.js";
 import GameRules from "./GameRules.js";
 import { socket } from "./socket.js";
+import type { Theme } from "./theme.js";
 
 interface GameBoardProps {
   readonly room: LobbyRoomSnapshot;
@@ -22,6 +30,7 @@ interface GameBoardProps {
   readonly notice: string;
   readonly brand: ReactNode;
   readonly connection: ReactNode;
+  readonly theme: Theme;
   /** 顶栏的白天 / 夜间切换按钮。 */
   readonly themeToggle: ReactNode;
   readonly chat: ReactNode;
@@ -43,124 +52,137 @@ function useCountdown(room: LobbyRoomSnapshot): number | null {
   return Math.max(0, Math.ceil((anchor.ms - Math.max(0, now - anchor.at)) / 1000));
 }
 
-const STATUS_LABEL: Record<Player["status"], string> = { active: "要牌中", stayed: "停牌", frozen: "冻结", busted: "爆了" };
+const PILE_NAME = ["左边", "右边"] as const;
+const EFFECT_TEXT: Record<PairEffect, string> = {
+  crab: "从弃牌堆挑一张",
+  boat: "再来一回合",
+  fish: "从牌堆摸一张",
+  steal: "偷对手一张",
+};
+const PAIR_NAME: Record<PairEffect, string> = { crab: "两只蟹", boat: "两艘船", fish: "两条鱼", steal: "鲨鱼 + 泳者" };
+const SKIP_TEXT: Record<PairEffect, string> = {
+  crab: "两个弃牌堆都空了，蟹的效果用不了",
+  boat: "没有牌可拿了，船的效果用不了",
+  fish: "牌堆空了，鱼的效果用不了",
+  steal: "没有能偷的对手，效果用不了",
+};
 
-function describeEvent(event: GameEvent, name: (id: string) => string): string | null {
+const quote = (card: Pick<Card, "type" | "color">) => `「${cardLabel(card)}」`;
+
+function describeEvent(event: GameEvent, name: (id: string) => string, myId: string): string | null {
+  const who = (id: string) => name(id);
   switch (event.type) {
     case "RoundStarted":
-      return `第 ${event.round} 轮开始，${name(event.dealer)}当庄家`;
-    case "Drew":
-      if (event.via === "deal") return `${name(event.player)}发到 ${cardName(event.card)}`;
-      if (event.via === "flip3") return `${name(event.player)}翻三：${cardName(event.card)}`;
-      return `${name(event.player)}要牌：${cardName(event.card)}`;
-    case "Busted":
-      return `${name(event.player)}又摸到 ${event.card.value}，爆了！`;
-    case "Saved":
-      return `${name(event.player)}用二次机会挡掉了重复的 ${event.card.value}`;
-    case "Stayed":
-      return event.forced ? `牌摸光了，${name(event.player)}只能停牌` : `${name(event.player)}停牌`;
-    case "Frozen":
-      return event.by === event.target ? `${name(event.by)}冻结了自己` : `${name(event.by)}冻结了${name(event.target)}`;
-    case "FlipThree":
-      return event.by === event.target ? `${name(event.by)}让自己连翻三张` : `${name(event.by)}让${name(event.target)}连翻三张`;
-    case "SecondChanceGiven":
-      return `${name(event.by)}把二次机会给了${name(event.target)}`;
-    case "ModifierGiven":
-      return event.by === event.target ? `${name(event.by)}留下了 ${cardName(event.card)}` : `${name(event.by)}把 ${cardName(event.card)} 给了${name(event.target)}`;
-    case "Discarded":
-      return `${name(event.player)}的${cardName(event.card)}作废`;
-    case "Flip7":
-      return `${name(event.player)}凑齐 7 张不同的数字，翻七！`;
-    case "Flip7Choice":
-      return event.target === null ? `${name(event.player)}拿走翻七奖励 +15` : `${name(event.player)}让${name(event.target)}本轮 −15`;
-    case "Reshuffled":
-      return `牌堆摸光了，弃牌堆 ${event.count} 张洗成新牌堆`;
+      return `第 ${event.round} 轮开始，${who(event.first)}先手；弃牌堆翻出 ${event.piles.map(quote).join(" 和 ")}`;
+    case "TurnStarted":
+      if (event.extra) return `${who(event.player)}再来一回合`;
+      if (event.final) return `${who(event.player)}的最后一回合`;
+      return null;
+    case "DrewDeck":
+      if (event.cards && event.player === myId) return event.cards.length === 1 ? `你摸到最后一张：${quote(event.cards[0]!)}` : `你摸了 ${event.cards.map(quote).join(" 和 ")}`;
+      return `${who(event.player)}从牌堆摸了 ${event.count} 张`;
+    case "Kept":
+      if (!event.discarded) return null;
+      if (event.kept && event.player === myId) return `你留下${quote(event.kept)}，把${quote(event.discarded)}丢到${PILE_NAME[event.pile as 0 | 1]}`;
+      return `${who(event.player)}留下一张，把${quote(event.discarded)}丢到${PILE_NAME[event.pile as 0 | 1]}`;
+    case "TookDiscard":
+      return `${who(event.player)}拿走${PILE_NAME[event.pile as 0 | 1]}的${quote(event.card)}`;
+    case "PlayedPair":
+      return `${who(event.player)}打出${PAIR_NAME[event.effect]}：${EFFECT_TEXT[event.effect]}`;
+    case "EffectSkipped":
+      return SKIP_TEXT[event.effect];
+    case "CrabPile":
+      return `${who(event.player)}翻看${PILE_NAME[event.pile as 0 | 1]}的弃牌堆`;
+    case "CrabTook":
+      return event.card ? `你从${PILE_NAME[event.pile as 0 | 1]}的弃牌堆拿了${quote(event.card)}` : `${who(event.player)}从${PILE_NAME[event.pile as 0 | 1]}的弃牌堆拿了一张`;
+    case "FishDrew":
+      return event.card ? `你从牌堆摸到${quote(event.card)}` : `${who(event.player)}从牌堆摸了一张`;
+    case "Stole":
+      if (event.card && event.player === myId) return `你从${who(event.from)}手里偷到${quote(event.card)}`;
+      if (event.card && event.from === myId) return `${who(event.player)}从你手里偷走了${quote(event.card)}`;
+      return `${who(event.player)}从${who(event.from)}手里偷走一张`;
+    case "Announced":
+      return event.call === "stop" ? `${who(event.player)}宣告 STOP！（卡牌分 ${event.points}）` : `${who(event.player)}宣告最后机会！（卡牌分 ${event.points}），其他人各打最后一回合`;
+    case "Revealed":
+      return `${who(event.player)}亮出手牌：卡牌分 ${event.points}`;
     case "TurnTimedOut":
-      return `${name(event.player)}超时，自动处理`;
-    case "RoundEnded":
-      return `第 ${event.round} 轮结束${event.reason === "flip7" ? "（有人翻七）" : ""}`;
+      return `${who(event.player)}超时，自动处理`;
+    case "RoundEnded": {
+      if (event.reason === "emptyDeck") return `第 ${event.round} 轮结束：牌堆摸空了，这一轮不计分`;
+      if (event.reason === "stop") return `第 ${event.round} 轮结束（STOP）：每人拿自己的卡牌分`;
+      return `第 ${event.round} 轮结束：${who(event.caller ?? "")}的最后机会${event.betWon ? "赌赢了" : "赌输了"}`;
+    }
+    case "MermaidWin":
+      return `${who(event.player)}集齐 4 张美人鱼，直接获胜！`;
     case "GameEnded":
-      return `${event.winners.map(name).join("、")}获胜！`;
+      return `${event.winners.map(who).join("、")}获胜！`;
     default:
       return null;
   }
 }
 
-/** 每张新牌的出场顺序（按事件先后），用来错开翻牌动画；爆掉、翻七等印章跟在对应的牌后面出现。 */
+/** 这次操作里，我看得到的新进手牌（翻牌动画用）和新打出的对子。 */
 interface Fresh {
-  readonly cards: Map<number, number>;
-  readonly stamps: Map<string, number>;
-  readonly steps: number;
+  readonly cards: Set<number>;
+  readonly piles: Set<number>;
 }
 
-function freshFrom(events: readonly GameEvent[]): Fresh {
-  const cards = new Map<number, number>();
-  const stamps = new Map<string, number>();
-  let step = 0;
+function freshFrom(events: readonly GameEvent[], myId: string): Fresh {
+  const cards = new Set<number>();
+  const piles = new Set<number>();
   for (const event of events) {
-    if (event.type === "Drew") cards.set(event.card.id, step++);
-    else if (event.type === "Busted" || event.type === "Flip7" || event.type === "Frozen" || event.type === "Saved") {
-      const who = event.type === "Frozen" ? event.target : event.player;
-      stamps.set(`${event.type}:${who}`, Math.max(0, step - 1));
+    if (event.type === "Kept" && event.kept && event.player === myId) cards.add(event.kept.id);
+    if (event.type === "Kept" && event.discarded) piles.add(event.pile);
+    if (event.type === "TookDiscard" && event.player === myId) cards.add(event.card.id);
+    if ((event.type === "CrabTook" || event.type === "FishDrew") && event.card) cards.add(event.card.id);
+    if (event.type === "Stole" && event.card && event.player === myId) cards.add(event.card.id);
+    if (event.type === "PlayedPair") for (const card of event.cards) cards.add(card.id);
+    if (event.type === "DrewDeck" && event.cards) for (const card of event.cards) cards.add(card.id);
+    if (event.type === "RoundStarted") {
+      piles.add(0);
+      piles.add(1);
     }
   }
-  return { cards, stamps, steps: step };
+  return { cards, piles };
 }
 
-const STEP_MS = 260;
-
-/** 座位网格：按可用空间和人数选列数，让牌尽量大（数字字号 12 的整数倍、图标 32 的整数倍）。 */
-interface Layout {
-  cols: number;
-  /** side：座位够宽时名字和分数放在左边、牌放在右边；stack：名字在上、牌在下。 */
-  side: boolean;
-  cw: number;
-  cf: number;
-  ci: number;
-  mobile: boolean;
+/**
+ * 牌的大小：按牌桌区域的高度算（对手一排 + 中间牌堆 + 自己的面前和手牌），宽度不够时手牌叠起来。
+ * --cw 大牌宽（中间牌堆和手牌），--mw 小牌宽（对手面前、打出的对子）；牌太窄时（small-cards）大牌也用 36px 的小图。
+ */
+interface Sizes {
+  /** 手牌的最大宽度（张数多时再缩）。 */
+  readonly cw: number;
+  /** 中间牌堆和弃牌堆的牌宽：按剩下的高度放大；够宽（≥ 168）时小图按 2 倍显示。 */
+  readonly pw: number;
+  readonly mw: number;
+  readonly mobile: boolean;
 }
 
-const SLOTS = 8; // 7 张数字牌 + 1 张修饰牌的位置
-const GAP = 4;
-const SEAT_PAD_X = 20;
-const SEAT_OVERHEAD_Y = 66; // 座位的标题行 + 内边距 + 间距
-const SIDE_HEAD_W = 196; // side 布局里左边名字和分数那一栏
-const SIDE_OVERHEAD_Y = 20;
-
-function cardSizes(cw: number): Pick<Layout, "cw" | "cf" | "ci"> {
-  const width = Math.max(30, Math.floor(cw));
-  const cf = Math.max(24, Math.floor((width * 0.6) / 12) * 12);
-  const ci = width >= 80 ? 64 : 32;
-  return { cw: width, cf, ci };
+function pickSizes(height: number, mobile: boolean, revealedRows: number): Sizes {
+  if (mobile) return { cw: 64, pw: 64, mw: 44, mobile };
+  const mw = height >= 820 ? 52 : 44;
+  const opps = mw * 1.4 + 70 + revealedRows * (mw * 1.4 + 6);
+  const fixed = 300 + revealedRows * (mw * 1.4 + 6) + (mw - 44) * 3;
+  const cw = Math.max(64, Math.min(128, Math.floor((height - fixed) / 2.8 / 4) * 4));
+  const me = cw * 1.4 + mw * 1.4 + 70;
+  const center = height - opps - me - 20;
+  const pw = Math.max(64, Math.min(176, Math.floor((center - 44) / 1.4 / 4) * 4));
+  return { cw, pw, mw, mobile };
 }
 
-function pickLayout(width: number, height: number, count: number, mobile: boolean): Layout {
-  const cellWidth = (cols: number) => (width - (cols - 1) * 10) / cols;
-  const rowCard = (rowWidth: number) => (rowWidth - (SLOTS - 1) * GAP) / SLOTS;
-  if (mobile) return { cols: 1, side: false, mobile, ...cardSizes(Math.min(rowCard(cellWidth(1) - SEAT_PAD_X), 64)) };
-  let best = { cols: 1, side: false, cw: 0 };
-  for (let cols = 1; cols <= count; cols += 1) {
-    const rows = Math.ceil(count / cols);
-    const cellW = cellWidth(cols);
-    const cellH = (height - (rows - 1) * 10) / rows;
-    const stack = Math.min(rowCard(cellW - SEAT_PAD_X), (cellH - SEAT_OVERHEAD_Y) / 1.4);
-    const side = Math.min(rowCard(cellW - SEAT_PAD_X - SIDE_HEAD_W), (cellH - SIDE_OVERHEAD_Y) / 1.4);
-    if (stack > best.cw + 0.5) best = { cols, side: false, cw: stack };
-    if (side > best.cw + 0.5) best = { cols, side: true, cw: side };
-  }
-  return { cols: best.cols, side: best.side, mobile, ...cardSizes(Math.min(best.cw, 168)) };
-}
-
-function useSeatLayout(count: number): [React.RefObject<HTMLDivElement | null>, Layout] {
+function useSizes(revealedRows: number): [React.RefObject<HTMLDivElement | null>, Sizes, { width: number; height: number }] {
   const ref = useRef<HTMLDivElement>(null);
-  const [layout, setLayout] = useState<Layout>({ cols: 2, side: false, cw: 48, cf: 24, ci: 32, mobile: false });
+  const [sizes, setSizes] = useState<Sizes>({ cw: 96, pw: 96, mw: 44, mobile: false });
+  const [box, setBox] = useState({ width: 800, height: 600 });
   useLayoutEffect(() => {
     const element = ref.current;
     if (!element) return;
     const update = () => {
       const mobile = window.innerWidth < 760;
-      const next = pickLayout(element.clientWidth, element.clientHeight, count, mobile);
-      setLayout((previous) => (previous.cols === next.cols && previous.cw === next.cw && previous.side === next.side && previous.mobile === next.mobile ? previous : next));
+      const next = pickSizes(element.clientHeight, mobile, revealedRows);
+      setSizes((previous) => (previous.cw === next.cw && previous.pw === next.pw && previous.mw === next.mw && previous.mobile === next.mobile ? previous : next));
+      setBox((previous) => (previous.width === element.clientWidth && previous.height === element.clientHeight ? previous : { width: element.clientWidth, height: element.clientHeight }));
     };
     update();
     const observer = new ResizeObserver(update);
@@ -170,120 +192,140 @@ function useSeatLayout(count: number): [React.RefObject<HTMLDivElement | null>, 
       observer.disconnect();
       window.removeEventListener("resize", update);
     };
-  }, [count]);
-  return [ref, layout];
-}
-
-/** 背景图 512×288，按整数倍放大到盖满屏幕。 */
-function useBackdropSize(): string {
-  const compute = () => {
-    const scale = Math.max(1, Math.ceil(Math.max(window.innerWidth / 512, window.innerHeight / 288)));
-    return `${512 * scale}px ${288 * scale}px`;
-  };
-  const [size, setSize] = useState(compute);
-  useEffect(() => {
-    const update = () => setSize(compute());
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
-  }, []);
-  return size;
+  }, [revealedRows]);
+  return [ref, sizes, box];
 }
 
 function Avatar({ player }: { player: Player }) {
   return (
-    <span className="f7-avatar" style={{ "--seat": seatColor(player.color) } as CSSProperties}>
+    <span className="ss-avatar" style={{ "--seat": seatColor(player.color) } as CSSProperties}>
       <img src={art.avatar(player.color)} alt="" onError={(event) => { event.currentTarget.style.visibility = "hidden"; }} />
     </span>
   );
 }
 
-function Seat({
+/** 打出的对子：每一对两张挨着。 */
+function PlayedPairs({ pairs, fresh }: { pairs: readonly (readonly Card[])[]; fresh: Fresh }) {
+  if (pairs.length === 0) return null;
+  return (
+    <div className="ss-pairs">
+      {pairs.map((pair) => (
+        <span className="ss-pair" key={pair[0]!.id}>
+          {pair.map((card) => <CardView key={card.id} card={card} className={`mini ${fresh.cards.has(card.id) ? "fresh" : ""}`} />)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** 颜色统计：每种颜色一个小色块 + 张数，最多的那种颜色描金边。 */
+function ColorCounts({ points }: { points: CardPoints }) {
+  const entries = COLORS.filter((color) => (points.colors[color] ?? 0) > 0);
+  if (entries.length === 0) return <span className="ss-muted">还没有牌</span>;
+  return (
+    <span className="ss-colors">
+      {entries.map((color) => (
+        <span
+          key={color}
+          className={(points.colors[color] ?? 0) === points.colorBonus ? "ss-color top" : "ss-color"}
+          style={colorStyle(color)}
+          title={`${CARD_COLORS[color].name}色 ${points.colors[color]} 张`}
+        >
+          {points.colors[color]}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function OpponentPanel({
   game,
   index,
-  me,
   online,
   fresh,
-  pickable,
-  hint,
-  onPick,
+  stealable,
+  onSteal,
 }: {
   game: GameState;
   index: number;
-  me: boolean;
   online: boolean;
   fresh: Fresh;
-  pickable: boolean;
-  hint: string | null;
-  onPick: () => void;
+  stealable: boolean;
+  onSteal: () => void;
 }) {
   const player = game.players[index]!;
-  const live = scorePlayer(game, index);
-  const roundOver = game.stage === "roundEnd" || game.phase === "finished";
   const isActor = game.phase === "playing" && game.actor === index;
-  const delay = (id: number) => fresh.cards.get(id);
-  const stampDelay = (type: string) => fresh.stamps.get(`${type}:${player.id}`);
-  const cardStyle = (id: number): CSSProperties | undefined => {
-    const order = delay(id);
-    return order === undefined ? undefined : { animationDelay: `${order * STEP_MS}ms` };
-  };
-  const status = player.flip7 ? "flip7" : player.status;
-  const stampAt = player.flip7 ? stampDelay("Flip7") : player.status === "busted" ? stampDelay("Busted") : player.status === "frozen" ? stampDelay("Frozen") : undefined;
-  const stampStyle = stampAt === undefined ? undefined : ({ animationDelay: `${(stampAt + 1) * STEP_MS}ms` } as CSSProperties);
-  const empty = Math.max(0, 7 - player.numbers.length - (player.bustCard ? 1 : 0));
-  const classes = ["f7-seat", `st-${status}`, me ? "me" : "", isActor ? "actor" : "", !online ? "offline" : "", pickable ? "pickable" : "", index === game.dealer ? "dealer" : ""].join(" ");
+  const caller = game.call?.player === index;
+  const points = player.revealed ? pointsOf(game, index) : cardPoints([], player.played);
+  const classes = ["ss-opp", isActor ? "actor" : "", !online ? "offline" : "", stealable ? "pickable" : "", player.revealed ? "revealed" : ""].join(" ");
+  const status = caller
+    ? game.call?.kind === "lastChance" ? "宣告了最后机会" : "宣告了 STOP"
+    : isActor
+      ? game.extraTurn ? "再来一回合" : "行动中"
+      : game.finalTurns.includes(index) ? "还有最后一回合" : player.revealed && game.call ? "已亮牌" : "";
   const body = (
     <>
-      <header className="f7-seat-head">
+      <header className="ss-opp-head">
         <Avatar player={player} />
-        <span className="f7-seat-name">
-          <strong>{me ? `${player.name}（你）` : player.name}</strong>
+        <span className="ss-opp-name">
+          <strong>{player.name}</strong>
           <small>
-            {index === game.dealer && <em className="f7-tag dealer">庄</em>}
-            {!online && <em className="f7-tag off">离线</em>}
-            {player.secondChance && <img className="f7-chip-icon" src={art.secondChance} alt="二次机会" title={ACTION_HELP.secondChance} />}
-            {player.actions.map((card) => <img key={card.id} className="f7-chip-icon" src={cardIcon(card.kind)!} alt={cardName(card)} title={ACTION_HELP[card.kind as "freeze"]} />)}
-            <span className={`f7-status s-${status}`}>{player.flip7 ? "翻七！" : isActor && game.stage === "turn" ? "思考中" : STATUS_LABEL[player.status]}</span>
+            {!online && <em className="ss-tag off">离线</em>}
+            {status && <em className={caller ? "ss-tag call" : isActor ? "ss-tag turn" : "ss-tag"}>{status}</em>}
           </small>
         </span>
-        {pickable && hint && <span className="f7-pick-hint">{hint}</span>}
-        <span className="f7-seat-score" title="本轮得分 / 总分">
-          <b className={live.total < 0 ? "neg" : ""}>{roundOver && player.lastRound ? (player.lastRound.total >= 0 ? `+${player.lastRound.total}` : player.lastRound.total) : live.total}</b>
-          <i>总 {player.score}</i>
+        <span className="ss-opp-hand" title={`手里 ${player.handCount} 张`}>
+          <CardBack className="tiny" />
+          <b>{player.handCount}</b>
+        </span>
+        <span className="ss-opp-score" title="总分">
+          <b>{player.score}</b>
+          <small>总分</small>
         </span>
       </header>
-      <div className="f7-row">
-        {player.numbers.map((card) => <CardView key={card.id} card={card} className={delay(card.id) !== undefined ? "fresh" : ""} style={cardStyle(card.id)} />)}
-        {player.bustCard && <CardView key={player.bustCard.id} card={player.bustCard} className={`dup ${delay(player.bustCard.id) !== undefined ? "fresh" : ""}`} style={cardStyle(player.bustCard.id)} title={`重复的 ${player.bustCard.value}，爆了`} />}
-        {Array.from({ length: empty }, (_, k) => <span key={`e${k}`} className="f7-card slot" aria-hidden="true" />)}
-        {player.modifiers.length > 0 && <span className="f7-row-gap" aria-hidden="true" />}
-        {player.modifiers.map((card) => <CardView key={card.id} card={card} className={delay(card.id) !== undefined ? "fresh" : ""} style={cardStyle(card.id)} />)}
+      <div className="ss-opp-cards">
+        {player.played.length === 0 && !player.revealed && <span className="ss-muted">面前还没有打出的牌</span>}
+        <PlayedPairs pairs={player.played} fresh={fresh} />
+        {player.revealed && player.hand.length > 0 && (
+          <div className="ss-revealed" title="亮出的手牌（不能被偷）">
+            {sortCards(player.hand).map((card) => <CardView key={card.id} card={card} className="mini" />)}
+          </div>
+        )}
       </div>
-      {(status === "busted" || status === "flip7" || status === "frozen") && (
-        <span className={`f7-stamp s-${status}`} style={stampStyle} aria-hidden="true">
-          <span className="f7-stamp-inner">
-            {status === "busted" && <span className="f7-fx bust" style={{ ...stampStyle, "--frames": FX_FRAMES.bust, backgroundImage: `url(${art.bustFx})` } as CSSProperties} />}
-            <b>
-              {status === "flip7" ? (
-                <span className="f7-fx flip7" style={{ ...stampStyle, "--frames": FX_FRAMES.flip7, backgroundImage: `url(${art.flip7Fx})` } as CSSProperties} />
-              ) : (
-                <img src={status === "busted" ? art.bust : art.freeze} alt="" />
-              )}
-              {status === "busted" ? "爆了" : status === "flip7" ? "翻七" : "冻结"}
-            </b>
-          </span>
-        </span>
-      )}
+      <footer className="ss-opp-foot">
+        <span>{player.revealed ? `卡牌分 ${points.total}` : `面前 ${points.total} 分`}</span>
+        {player.revealed && <ColorCounts points={points} />}
+      </footer>
+      {stealable && <span className="ss-pick-hint">偷他一张</span>}
     </>
   );
   const style = { "--seat": seatColor(player.color) } as CSSProperties;
-  return pickable ? (
-    <button type="button" className={classes} style={style} onClick={onPick}>{body}</button>
+  return stealable ? (
+    <button type="button" className={classes} style={style} onClick={onSteal}>{body}</button>
   ) : (
     <section className={classes} style={style} aria-label={`${player.name}的牌`}>{body}</section>
   );
 }
 
-function GameBoard({ room, busy, error, notice, brand, connection, themeToggle, chat, onCommand, onRematch, onDissolve }: GameBoardProps) {
+/** 拿到这张牌，我的卡牌分会多几分（显示在可以拿的牌上）。 */
+function gainOf(me: Player | undefined, card: Card): number {
+  if (!me) return 0;
+  return cardPoints([...me.hand, card], me.played).total - cardPoints(me.hand, me.played).total;
+}
+
+function gainBadge(gain: number): ReactNode {
+  return <span className={gain > 0 ? "ss-gain up" : "ss-gain"}>{gain > 0 ? `+${gain} 分` : "+0"}</span>;
+}
+
+/** 鼠标悬停预览：拿到这张牌之后我的卡牌分。 */
+function previewText(me: Player | undefined, cards: readonly Card[]): string {
+  if (!me) return "";
+  const before = cardPoints(me.hand, me.played).total;
+  const after = cardPoints([...me.hand, ...cards], me.played).total;
+  return after === before ? `拿了还是 ${after} 分` : `拿了 ${before} → ${after} 分`;
+}
+
+function GameBoard({ room, busy, error, notice, brand, connection, theme, themeToggle, chat, onCommand, onRematch, onDissolve }: GameBoardProps) {
   const game = room.game!;
   const member = room.members.find((candidate) => candidate.id === socket.id);
   const myId = member?.playerId ?? "";
@@ -291,7 +333,9 @@ function GameBoard({ room, busy, error, notice, brand, connection, themeToggle, 
   const myIndex = game.players.findIndex((player) => player.id === myId);
   const me = game.players[myIndex];
   const actor = game.players[game.actor];
-  const myMove = game.phase === "playing" && game.actor === myIndex && myIndex !== -1;
+  const playing = game.phase === "playing";
+  const myMove = playing && game.actor === myIndex && myIndex !== -1;
+  const stage = game.stage;
   const secondsLeft = useCountdown(room);
   const nameOf = (playerId: string) => (playerId === myId ? "你" : game.players.find((player) => player.id === playerId)?.name ?? "?");
   const online = (playerId: string) => room.members.find((candidate) => candidate.playerId === playerId)?.connected ?? false;
@@ -299,57 +343,76 @@ function GameBoard({ room, busy, error, notice, brand, connection, themeToggle, 
   const shownNotice = game.version === firstVersion.current ? notice : "";
   const send = (command: GameCommand) => { if (!busy) onCommand(command); };
 
-  // 只在 version 变了的时候播新牌动画（聊天也会推整个房间状态）；刚进房间 / 重连时不播。
+  // 只在 version 变了的时候播动画（聊天也会推整个房间状态）；刚进房间 / 重连时不播。
   const fresh = useMemo<Fresh>(
-    () => (game.version === firstVersion.current ? { cards: new Map(), stamps: new Map(), steps: 0 } : freshFrom(game.events)),
+    () => (game.version === firstVersion.current ? { cards: new Set(), piles: new Set() } : freshFrom(game.events, myId)),
     [game.version],
   );
 
-  // 座位顺序：从自己开始按座位往下数。
-  const order = useMemo(() => {
+  // 对手：从自己的下一位开始按座位顺序。
+  const opponents = useMemo(() => {
     const n = game.players.length;
     const start = Math.max(0, myIndex);
-    return Array.from({ length: n }, (_, k) => (start + k) % n);
+    return Array.from({ length: n - 1 }, (_, k) => (start + 1 + k) % n);
   }, [game.players.length, myIndex]);
-  const [seatsRef, layout] = useSeatLayout(game.players.length);
+  const revealedRows = opponents.some((index) => game.players[index]!.revealed && game.players[index]!.hand.length > 0) ? 1 : 0;
+  const [tableRef, sizes, tableBox] = useSizes(revealedRows);
+  const tableWidth = tableBox.width;
 
-  // 选目标
-  const top = game.pending.at(-1);
-  const giving: Card | null = game.stage === "target" && top?.type === "target" ? top.card : null;
-  const targets = useMemo(() => (giving && game.actor >= 0 ? targetsFor(game, game.actor, giving) : []), [game.version, giving]);
-  const canPick = (index: number) => myMove && ((giving !== null && targets.includes(index)) || (game.stage === "flip7Choice" && index !== myIndex));
-  const pickHint = (index: number): string | null => {
-    if (!canPick(index)) return null;
-    const self = index === myIndex;
-    if (game.stage === "flip7Choice") return "罚他 −15";
-    switch (giving?.kind) {
-      case "freeze":
-        return self ? "冻结自己" : "冻结他";
-      case "flipThree":
-        return self ? "自己翻三" : "让他翻三";
-      default:
-        return self ? "留给自己" : "给他";
+  const myPoints = me ? pointsOf(game, myIndex) : null;
+  const hand = useMemo(() => (me ? sortCards(me.hand) : []), [game.version, me?.hand.length]);
+  const pairs = useMemo(() => (me && myMove && stage === "play" ? playablePairs(me.hand) : []), [game.version, myMove, stage]);
+  const pairCardIds = useMemo(() => {
+    const ids = new Set<number>();
+    if (!me || !myMove || stage !== "play") return ids;
+    for (const card of me.hand) {
+      if (card.type === "crab" || card.type === "boat" || card.type === "fish") {
+        if (me.hand.filter((other) => other.type === card.type).length >= 2) ids.add(card.id);
+      } else if ((card.type === "shark" && me.hand.some((other) => other.type === "swimmer")) || (card.type === "swimmer" && me.hand.some((other) => other.type === "shark"))) {
+        ids.add(card.id);
+      }
     }
+    return ids;
+  }, [game.version, myMove, stage]);
+  const [hoverPair, setHoverPair] = useState<number[]>([]);
+  const [keepPick, setKeepPick] = useState<number | null>(null);
+  useEffect(() => setKeepPick(null), [game.version]);
+
+  const thieves = myMove && stage === "steal" ? stealTargets(game, myIndex) : [];
+  const declareOk = myIndex >= 0 && canDeclare(game, myIndex);
+  const pileOptions = discardOptions(game);
+
+  /** 打出手里这张牌所在的那一对（找一张能配的）。 */
+  const playPairWith = (card: Card) => {
+    if (!me) return;
+    const partner = me.hand.find((other) =>
+      other.id !== card.id && (card.type === "shark" ? other.type === "swimmer" : card.type === "swimmer" ? other.type === "shark" : other.type === card.type),
+    );
+    if (partner) send({ type: "PLAY_PAIR", cards: [card.id, partner.id] });
   };
-  const pick = (index: number) => {
-    const id = game.players[index]!.id;
-    if (game.stage === "flip7Choice") send({ type: "FLIP7", target: id });
-    else send({ type: "TARGET", target: id });
+  const keep = (card: Card, pile?: 0 | 1) => {
+    if (pile !== undefined) send({ type: "KEEP", card: card.id, pile });
+    else if (pileOptions.length === 1) send({ type: "KEEP", card: card.id, pile: pileOptions[0]! });
+    else setKeepPick(card.id);
   };
 
-  // 键盘：H / 空格 要牌，S 停牌，N 下一轮。
+  // 键盘：D 摸牌堆，1 / 2 拿左 / 右弃牌堆（打蟹时选堆），E 结束回合，S STOP，L 最后机会，N 下一轮。
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       const key = event.key.toLowerCase();
-      if (myMove && game.stage === "turn" && (key === "h" || key === " ")) {
-        event.preventDefault();
-        send({ type: "HIT" });
-      } else if (myMove && game.stage === "turn" && key === "s") {
-        send({ type: "STAY" });
-      } else if (game.stage === "roundEnd" && game.phase === "playing" && key === "n" && !game.ready.includes(myId)) {
+      if (myMove && stage === "draw") {
+        if (key === "d" && game.deckCount > 0) send({ type: "DRAW_DECK" });
+        else if ((key === "1" || key === "2") && game.discardCounts[Number(key) - 1]! > 0) send({ type: "TAKE_DISCARD", pile: (Number(key) - 1) as 0 | 1 });
+      } else if (myMove && stage === "crabPile" && (key === "1" || key === "2") && game.discardCounts[Number(key) - 1]! > 0) {
+        send({ type: "CRAB_PILE", pile: (Number(key) - 1) as 0 | 1 });
+      } else if (myMove && stage === "play") {
+        if (key === "e") send({ type: "END_TURN" });
+        else if (key === "s" && declareOk) send({ type: "STOP" });
+        else if (key === "l" && declareOk) send({ type: "LAST_CHANCE" });
+      } else if (stage === "roundEnd" && playing && key === "n" && !game.ready.includes(myId)) {
         send({ type: "READY" });
       }
     };
@@ -359,16 +422,15 @@ function GameBoard({ room, busy, error, notice, brand, connection, themeToggle, 
 
   // 在后台时标题提示轮到你了
   useEffect(() => {
-    const base = "翻七 · 在线对战";
-    const needsMe = myMove || (game.stage === "roundEnd" && game.phase === "playing" && !game.ready.includes(myId));
-    document.title = myMove && document.hidden ? `【轮到你】${base}` : base;
-    const onVisibility = () => { document.title = needsMe && document.hidden && myMove ? `【轮到你】${base}` : base; };
-    document.addEventListener("visibilitychange", onVisibility);
+    const base = "海盐与纸 · 在线对战";
+    const update = () => { document.title = myMove && document.hidden ? `【轮到你】${base}` : base; };
+    update();
+    document.addEventListener("visibilitychange", update);
     return () => {
-      document.removeEventListener("visibilitychange", onVisibility);
+      document.removeEventListener("visibilitychange", update);
       document.title = base;
     };
-  }, [myMove, game.stage, game.version]);
+  }, [myMove, game.version]);
 
   // 动作记录：断线重连后用 history 补上。
   const log = useMemo(() => {
@@ -376,7 +438,7 @@ function GameBoard({ room, busy, error, notice, brand, connection, themeToggle, 
     const history = game.history;
     const offset = game.version * 1000;
     history.forEach((event, index) => {
-      const text = describeEvent(event, nameOf);
+      const text = describeEvent(event, nameOf, myId);
       if (text) lines.push({ key: `${offset - history.length + index}`, text });
     });
     return lines.reverse();
@@ -389,157 +451,403 @@ function GameBoard({ room, busy, error, notice, brand, connection, themeToggle, 
   const [hideSummary, setHideSummary] = useState(false);
   useEffect(() => setHideSummary(false), [game.round, game.phase]);
 
-  const risk = me && me.status === "active" ? bustChance(game, me) : null;
-  const live = myIndex >= 0 ? scorePlayer(game, myIndex) : null;
-  const backdrop = backdropFor(room.code);
-  const backdropSize = useBackdropSize();
-
-  let headline: string;
+  // ---------- 右上角：现在该谁做什么 ----------
+  let headline = "";
   let detail = "";
   if (game.phase === "finished") headline = "对局结束";
-  else if (game.stage === "roundEnd") {
+  else if (stage === "roundEnd") {
     headline = `第 ${game.round} 轮结算`;
     detail = game.ready.includes(myId) ? `等其他人（${game.ready.length}/${game.players.length}）` : "看完结算点「下一轮」";
-  } else if (myMove && game.stage === "turn") {
-    headline = "轮到你了";
-    detail = me && me.numbers.length > 0 ? `要牌还是停牌？现在停牌本轮得 ${live?.total ?? 0} 分。` : "要牌还是停牌？你面前还没有数字牌。";
-  } else if (myMove && giving) {
-    headline = `把「${cardName(giving)}」交给谁？`;
-    detail = `${ACTION_HELP[giving.kind as "freeze"]}。点亮着的座位，或下面的名字。`;
-  } else if (myMove && game.stage === "flip7Choice") {
-    headline = "你翻七了！";
-    detail = "自己拿 +15，或者让一位对手本轮 −15。";
+  } else if (myMove) {
+    const final = game.call?.kind === "lastChance";
+    switch (stage) {
+      case "draw":
+        headline = game.extraTurn ? "再来一回合：拿牌" : final ? "最后一回合：拿牌" : "轮到你：拿牌";
+        detail = game.deckCount > 0 ? "从牌堆摸两张留一张，或者拿一个弃牌堆顶上的牌。" : "牌堆空了，只能拿弃牌堆顶上的牌。";
+        break;
+      case "keep":
+        headline = "留哪一张？";
+        detail = pileOptions.length === 1 ? `另一张会丢到${PILE_NAME[pileOptions[0]!]}（空的那一堆）。` : keepPick !== null ? "再点一个弃牌堆，把另一张丢进去。" : "点一张留下，另一张丢进你选的弃牌堆。";
+        break;
+      case "play":
+        headline = final ? "最后一回合：出牌" : "轮到你：出牌";
+        detail = final
+          ? "打完这一回合就亮牌结算，不能再宣告。"
+          : declareOk
+            ? `你的卡牌分 ${myPoints?.total ?? 0}，可以宣告结束本轮了。`
+            : `卡牌分到 ${game.config.declareAt} 分才能宣告（现在 ${myPoints?.total ?? 0}）。`;
+        break;
+      case "crabPile":
+        headline = "两只蟹：看哪一堆？";
+        detail = "选一个弃牌堆，翻看整堆，挑一张拿进手里。";
+        break;
+      case "crabPick":
+        headline = `从${PILE_NAME[(game.crabPile ?? 0) as 0 | 1]}的弃牌堆挑一张`;
+        detail = "别人不知道你拿了哪张。";
+        break;
+      case "steal":
+        headline = "鲨鱼 + 泳者：偷谁？";
+        detail = "从他手里随机偷一张（亮出的手牌不能偷）。";
+        break;
+    }
   } else if (actor) {
     const who = actor.name;
-    headline = game.stage === "turn" ? `轮到 ${who}` : game.stage === "flip7Choice" ? `${who} 翻七了！` : `${who} 在给「${cardName(giving!)}」选目标`;
-    detail = game.stage === "turn" ? `${who}在想要牌还是停牌` : game.stage === "flip7Choice" ? "在选 +15 还是罚人 −15" : ACTION_HELP[giving!.kind as "freeze"];
-  } else headline = "";
+    switch (stage) {
+      case "draw":
+        headline = `轮到 ${who}`;
+        detail = game.extraTurn ? `${who}打出两艘船，再来一回合` : `${who}在拿牌`;
+        break;
+      case "keep":
+        headline = `${who} 在挑一张`;
+        detail = "从牌堆摸了两张，留一张、丢一张";
+        break;
+      case "play":
+        headline = `轮到 ${who}`;
+        detail = `${who}在出牌`;
+        break;
+      case "crabPile":
+      case "crabPick":
+        headline = `${who} 在翻弃牌堆`;
+        detail = "两只蟹：从弃牌堆挑一张";
+        break;
+      case "steal":
+        headline = `${who} 要偷牌`;
+        detail = "鲨鱼 + 泳者：从一位对手手里随机偷一张";
+        break;
+    }
+  }
+
+  const backdrop = theme === "day" ? art.beachDay : art.beachNight;
+  const tableStyle = {
+    "--cw": `${sizes.pw}px`,
+    "--mw": `${sizes.mw}px`,
+    "--backdrop": `url(${backdrop})`,
+    "--bs": coverSize(tableBox.width, tableBox.height),
+  } as CSSProperties;
+
+  // 手牌：张数少时和中间的牌一样大；放不下就按张数缩小（最小 80px）；再放不下才叠起来（每张至少露出左边一条：名字和颜色）。
+  const handWidth = Math.max(200, tableWidth - (sizes.mobile ? 24 : 52));
+  const handGap = 6;
+  const fitWidth = hand.length > 0 ? Math.floor((handWidth - (hand.length - 1) * handGap) / hand.length) : sizes.cw;
+  const handCard = sizes.mobile ? sizes.cw : Math.max(80, Math.min(sizes.cw, Math.floor(fitWidth / 4) * 4));
+  const natural = hand.length * handCard + Math.max(0, hand.length - 1) * handGap;
+  const handStep = !sizes.mobile && hand.length > 1 && natural > handWidth ? Math.max(28, (handWidth - handCard) / (hand.length - 1)) : handCard + handGap;
+
+  const crabCards = myMove && stage === "crabPick" && game.crabPile !== null ? game.discards[game.crabPile as 0 | 1] : [];
+  const callChip = game.call && playing && stage !== "roundEnd"
+    ? `${nameOf(game.players[game.call.player]!.id)}宣告了${game.call.kind === "lastChance" ? "最后机会" : "STOP"}`
+    : null;
+
+  const pileNode = (pile: 0 | 1) => {
+    const top = game.discards[pile].at(-1);
+    const count = game.discardCounts[pile];
+    const canTake = myMove && stage === "draw" && count > 0;
+    const canCrab = myMove && stage === "crabPile" && count > 0;
+    const canDump = myMove && stage === "keep" && keepPick !== null && pileOptions.includes(pile);
+    const onClick = canTake
+      ? () => send({ type: "TAKE_DISCARD", pile })
+      : canCrab
+        ? () => send({ type: "CRAB_PILE", pile })
+        : canDump
+          ? () => send({ type: "KEEP", card: keepPick!, pile })
+          : undefined;
+    const badge = canTake && top ? gainBadge(gainOf(me, top)) : canCrab ? "看这一堆" : canDump ? "丢这里" : null;
+    const highlight = (myMove && stage === "keep" && keepPick === null && pileOptions.length === 1 && pileOptions[0] === pile) || (myMove && stage === "crabPick" && game.crabPile === pile);
+    return (
+      <div className={["ss-pile", fresh.piles.has(pile) ? "fresh" : "", highlight ? "marked" : ""].join(" ")} key={pile}>
+        {top ? (
+          <CardView
+            card={top}
+            className={onClick ? "pickable" : ""}
+            onClick={onClick}
+            disabled={busy}
+            badge={badge}
+            title={canTake && me ? `${cardLabel(top)}：${previewText(me, [top])}` : undefined}
+          />
+        ) : canDump ? (
+          <button type="button" className="ss-card empty pickable" onClick={onClick} disabled={busy}><span className="ss-card-badge">丢这里</span></button>
+        ) : (
+          <span className="ss-card empty"><small>空</small></span>
+        )}
+        <span className="ss-pile-label">{PILE_NAME[pile]}弃牌堆 <b>{count}</b></span>
+      </div>
+    );
+  };
 
   return (
-    <div
-      className={layout.mobile ? "f7-screen mobile" : "f7-screen"}
-      style={{ "--backdrop": `url(${backdrop})`, "--bs": backdropSize } as CSSProperties}
-    >
-      <header className="f7-topbar">
+    <div className={sizes.mobile ? "ss-screen mobile" : "ss-screen"}>
+      <header className="ss-topbar">
         {brand}
-        <div className="f7-round">
+        <div className="ss-round">
           <span>第 <b>{game.round}</b> 轮</span>
-          <span className="f7-goal">先到 {game.config.targetScore} 分</span>
-          {game.config.brutal && <span className="f7-brutal" title="残酷模式：修饰牌可以给任何人；翻七可以改成罚一位对手 −15">残酷</span>}
+          <span className="ss-goal">先到 <b>{game.config.targetScore}</b> 分</span>
+          {callChip && <span className="ss-call-chip">{callChip}</span>}
         </div>
-        <div className="f7-topbar-right">
+        <div className="ss-topbar-right">
           {themeToggle}
-          <GameRules brutal={game.config.brutal} />
+          <GameRules />
           {isHost && <button className="quiet-button danger" type="button" onClick={onDissolve}>解散</button>}
           {connection}
         </div>
       </header>
 
-      <div className="f7-layout">
-        <div
-          className={["f7-seats", layout.side ? "side" : "", layout.cw >= 72 ? "big-cards" : ""].join(" ")}
-          ref={seatsRef}
-          style={{ "--cols": layout.cols, "--cw": `${layout.cw}px`, "--cf": `${layout.cf}px`, "--ci": `${layout.ci}px` } as CSSProperties}
-        >
-          {order.map((index) => (
-            <Seat
-              key={game.players[index]!.id}
-              game={game}
-              index={index}
-              me={index === myIndex}
-              online={online(game.players[index]!.id)}
-              fresh={fresh}
-              pickable={canPick(index)}
-              hint={pickHint(index)}
-              onPick={() => pick(index)}
-            />
-          ))}
-          {game.stage === "roundEnd" && game.phase === "playing" && !hideSummary && (
+      <div className="ss-layout">
+        <div className={["ss-table", sizes.pw < 92 ? "small-cards" : "", sizes.pw >= 168 ? "double-art" : ""].join(" ")} ref={tableRef} style={tableStyle}>
+          <div className={`ss-opps n${opponents.length}`}>
+            {opponents.map((index) => (
+              <OpponentPanel
+                key={game.players[index]!.id}
+                game={game}
+                index={index}
+                online={online(game.players[index]!.id)}
+                fresh={fresh}
+                stealable={thieves.includes(index)}
+                onSteal={() => send({ type: "STEAL", target: game.players[index]!.id })}
+              />
+            ))}
+          </div>
+
+          <div className="ss-center">
+            <div className="ss-deck">
+              {game.deckCount > 0 ? (
+                myMove && stage === "draw" ? (
+                  <button type="button" className="ss-card back pickable" onClick={() => send({ type: "DRAW_DECK" })} disabled={busy} title="从牌堆摸两张，留一张，另一张丢进弃牌堆">
+                    <img src={art.emblem} alt="" />
+                    <span className="ss-card-badge">摸两张</span>
+                  </button>
+                ) : (
+                  <CardBack />
+                )
+              ) : (
+                <span className="ss-card empty"><small>空</small></span>
+              )}
+              <span className="ss-pile-label">牌堆 <b>{game.deckCount}</b></span>
+            </div>
+            {pileNode(0)}
+            {pileNode(1)}
+
+            {stage === "keep" && (
+              <div className="ss-choice">
+                {myMove ? (
+                  game.drawn.map((card) => (
+                    <CardView
+                      key={card.id}
+                      card={card}
+                      className={["pickable", "fresh", keepPick === card.id ? "chosen" : ""].join(" ")}
+                      onClick={() => keep(card)}
+                      disabled={busy}
+                      badge={keepPick === card.id ? "留这张" : gainBadge(gainOf(me, card))}
+                      title={`${cardLabel(card)}：${previewText(me, [card])}`}
+                    />
+                  ))
+                ) : (
+                  Array.from({ length: game.drawnCount }, (_, k) => <CardBack key={k} className="fresh" />)
+                )}
+                <span className="ss-choice-label">{myMove ? "摸到的两张" : `${actor?.name ?? ""} 摸到的两张`}</span>
+              </div>
+            )}
+          </div>
+
+          {crabCards.length > 0 && (
+            <div className="ss-crab">
+              <header>
+                <h3>{PILE_NAME[(game.crabPile ?? 0) as 0 | 1]}的弃牌堆：挑一张</h3>
+                <span className="ss-muted">{crabCards.length} 张，从最早丢的排到堆顶；牌上是拿了之后多几分</span>
+              </header>
+              <div className="ss-crab-cards">
+                {crabCards.map((card) => (
+                  <CardView
+                    key={card.id}
+                    card={card}
+                    className="pickable"
+                    onClick={() => send({ type: "CRAB_TAKE", card: card.id })}
+                    disabled={busy}
+                    badge={gainBadge(gainOf(me, card))}
+                    title={`${cardLabel(card)}：${previewText(me, [card])}`}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {me && (
+            <section className={["ss-me", myMove ? "actor" : "", me.revealed ? "revealed" : ""].join(" ")} style={{ "--seat": seatColor(me.color) } as CSSProperties}>
+              <header className="ss-me-head">
+                <Avatar player={me} />
+                <span className="ss-me-name">
+                  <strong>{me.name}（你）</strong>
+                  <small>
+                    {me.revealed && game.call && stage !== "roundEnd" ? <em className="ss-tag call">手牌已亮出，不会被偷</em> : <em className="ss-tag">手里 {me.handCount} 张</em>}
+                    {game.finalTurns.includes(myIndex) && <em className="ss-tag turn">你还有最后一回合</em>}
+                  </small>
+                </span>
+                {myPoints && (
+                  <span className="ss-me-points" title="卡牌分 = 对子 + 收集 + 乘数 + 美人鱼（手牌和面前一起算）">
+                    <span className="ss-big"><small>卡牌分</small><b className={declareOk ? "ok" : ""}>{myPoints.total}</b></span>
+                    <span className="ss-parts">
+                      <span>对子 {myPoints.pairs}</span>
+                      <span>收集 {myPoints.collectors}</span>
+                      <span>乘数 {myPoints.multipliers}</span>
+                      <span>美人鱼 {myPoints.mermaids}</span>
+                    </span>
+                    <span className="ss-bonus" title="颜色奖励：数量最多的那种颜色有几张（只在「最后机会」时算）">
+                      <small>颜色奖励 {myPoints.colorBonus}</small>
+                      <ColorCounts points={myPoints} />
+                    </span>
+                  </span>
+                )}
+                <span className="ss-opp-score ss-me-total"><b>{me.score}</b><small>总分</small></span>
+              </header>
+              <div className="ss-me-played">
+                {me.played.length > 0 ? <PlayedPairs pairs={me.played} fresh={fresh} /> : <span className="ss-muted">打出的对子摆在这里</span>}
+              </div>
+              <div className={handCard < 92 ? "ss-hand small-cards" : "ss-hand normal-cards"} style={{ "--step": `${handStep}px`, "--cw": `${handCard}px` } as CSSProperties}>
+                {hand.length === 0 && <span className="ss-muted">手里还没有牌</span>}
+                {hand.map((card) => {
+                  const inPair = pairCardIds.has(card.id);
+                  const lifted = hoverPair.includes(card.id);
+                  return (
+                    <CardView
+                      key={card.id}
+                      card={card}
+                      className={[fresh.cards.has(card.id) ? "fresh" : "", inPair ? "pickable" : "", lifted ? "lifted" : "", myMove && stage === "play" && !inPair ? "idle" : ""].join(" ")}
+                      onClick={inPair ? () => playPairWith(card) : undefined}
+                      disabled={busy}
+                      badge={inPair && lifted ? "打出" : undefined}
+                    />
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {stage === "roundEnd" && playing && !hideSummary && (
             <RoundSummary game={game} myId={myId} secondsLeft={secondsLeft} busy={busy} onReady={() => send({ type: "READY" })} onHide={() => setHideSummary(true)} />
           )}
         </div>
 
-        <aside className="f7-side">
-          <section className={myMove || (game.stage === "roundEnd" && !game.ready.includes(myId)) ? "f7-panel f7-action mine" : "f7-panel f7-action"}>
-            <div className="f7-action-head">
-              {actor && game.stage !== "roundEnd" && <i className="f7-dot" style={{ background: seatColor(actor.color) }} />}
+        <aside className="ss-side">
+          <section className={myMove || (stage === "roundEnd" && playing && !game.ready.includes(myId)) ? "ss-panel ss-action mine" : "ss-panel ss-action"}>
+            <div className="ss-action-head">
+              {actor && stage !== "roundEnd" && <i className="ss-dot" style={{ background: seatColor(actor.color) }} />}
               <h2>{headline}</h2>
-              {game.phase === "playing" && secondsLeft !== null && <b className={secondsLeft <= 10 ? "f7-timer low" : "f7-timer"}>{secondsLeft}s</b>}
+              {playing && secondsLeft !== null && <b className={secondsLeft <= 10 ? "ss-timer low" : "ss-timer"}>{secondsLeft}s</b>}
             </div>
-            {detail && <p className="f7-action-detail">{detail}</p>}
+            {detail && <p className="ss-action-detail">{detail}</p>}
 
-            {myMove && game.stage === "turn" && (
-              <div className="f7-buttons">
-                <button className="primary-button f7-hit" type="button" disabled={busy} onClick={() => send({ type: "HIT" })}>要牌<small>H</small></button>
-                <button className="quiet-button f7-stay" type="button" disabled={busy} onClick={() => send({ type: "STAY" })}>停牌<small>S</small></button>
-              </div>
-            )}
-            {myMove && giving && (
-              <div className="f7-target-list">
-                <CardView card={giving} className="f7-giving" />
-                <div>
-                  {targets.map((index) => {
-                    const player = game.players[index]!;
-                    const odds = player.status === "active" ? Math.round(bustChance(game, player) * 100) : null;
-                    return (
-                      <button key={player.id} type="button" className="quiet-button" disabled={busy} onClick={() => pick(index)}>
-                        <i className="f7-dot" style={{ background: seatColor(player.color) }} />
-                        {index === myIndex ? "自己" : player.name}
-                        <small>本轮 {scorePlayer(game, index).total}{odds !== null && giving.kind === "flipThree" ? ` · 每张爆 ${odds}%` : ""}</small>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-            {myMove && game.stage === "flip7Choice" && (
-              <div className="f7-target-list flip7">
-                <button className="primary-button" type="button" disabled={busy} onClick={() => send({ type: "FLIP7", target: null })}>自己 +15</button>
-                <div>
-                  {game.players.map((player, index) => index === myIndex ? null : (
-                    <button key={player.id} type="button" className="quiet-button" disabled={busy} onClick={() => pick(index)}>
-                      <i className="f7-dot" style={{ background: seatColor(player.color) }} />{player.name}<small>总 {player.score} · 罚 −15</small>
+            {myMove && stage === "draw" && (
+              <div className="ss-buttons">
+                {game.deckCount > 0 && (
+                  <button className="primary-button" type="button" disabled={busy} onClick={() => send({ type: "DRAW_DECK" })}>摸两张<small>D</small></button>
+                )}
+                {([0, 1] as const).map((pile) => {
+                  const top = game.discards[pile].at(-1);
+                  if (!top) return null;
+                  return (
+                    <button key={pile} className="quiet-button ss-take" type="button" disabled={busy} onClick={() => send({ type: "TAKE_DISCARD", pile })} title={previewText(me, [top])}>
+                      <span className="ss-swatch" style={colorStyle(top.color)} />拿{PILE_NAME[pile]}的{CARD_NAMES[top.type]}<small>{pile + 1}</small>
                     </button>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
             )}
-            {game.stage === "roundEnd" && game.phase === "playing" && (
-              <div className="f7-buttons">
+            {myMove && stage === "keep" && pileOptions.length > 1 && (
+              <div className="ss-keep-list">
+                {game.drawn.map((card) => (
+                  <div key={card.id} className={keepPick === card.id ? "ss-keep-row chosen" : "ss-keep-row"}>
+                    <span className="ss-swatch" style={colorStyle(card.color)} />
+                    <span>留{cardLabel(card)}，另一张丢</span>
+                    <button className="quiet-button" type="button" disabled={busy} onClick={() => keep(card, 0)}>左</button>
+                    <button className="quiet-button" type="button" disabled={busy} onClick={() => keep(card, 1)}>右</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {myMove && stage === "play" && (
+              <>
+                {pairs.length > 0 && (
+                  <div className="ss-pair-buttons">
+                    {pairs.map(([a, b]) => {
+                      const effect = a.type === "shark" || a.type === "swimmer" ? "steal" : (a.type as PairEffect);
+                      return (
+                        <button
+                          key={`${a.id}-${b.id}`}
+                          className="quiet-button ss-pair-button"
+                          type="button"
+                          disabled={busy}
+                          onClick={() => send({ type: "PLAY_PAIR", cards: [a.id, b.id] })}
+                          onMouseEnter={() => setHoverPair([a.id, b.id])}
+                          onMouseLeave={() => setHoverPair([])}
+                          onFocus={() => setHoverPair([a.id, b.id])}
+                          onBlur={() => setHoverPair([])}
+                        >
+                          <span className="ss-pair-icons"><img src={art.cardSmall(a.type)} alt="" /><img src={art.cardSmall(b.type)} alt="" /></span>
+                          <span>打出{PAIR_NAME[effect]}<small>{EFFECT_TEXT[effect]}</small></span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {declareOk && (
+                  <div className="ss-declare">
+                    <button className="quiet-button ss-stop" type="button" disabled={busy} onClick={() => send({ type: "STOP" })} title="本轮立刻结束，所有人拿自己的卡牌分">
+                      STOP<small>立刻结算 · S</small>
+                    </button>
+                    <button className="quiet-button ss-last" type="button" disabled={busy} onClick={() => send({ type: "LAST_CHANCE" })} title="其他人各再打一回合；你分最高（平分也算）就拿卡牌分 + 颜色奖励，他们只拿颜色奖励；否则反过来">
+                      最后机会<small>赌你最高 · L</small>
+                    </button>
+                  </div>
+                )}
+                <div className="ss-buttons">
+                  <button className={declareOk || pairs.length > 0 ? "quiet-button" : "primary-button"} type="button" disabled={busy} onClick={() => send({ type: "END_TURN" })}>
+                    结束回合<small>E</small>
+                  </button>
+                </div>
+              </>
+            )}
+            {myMove && stage === "crabPile" && (
+              <div className="ss-buttons">
+                {([0, 1] as const).map((pile) => game.discardCounts[pile] > 0 && (
+                  <button key={pile} className="primary-button" type="button" disabled={busy} onClick={() => send({ type: "CRAB_PILE", pile })}>
+                    看{PILE_NAME[pile]}<small>{game.discardCounts[pile]} 张 · {pile + 1}</small>
+                  </button>
+                ))}
+              </div>
+            )}
+            {myMove && stage === "steal" && (
+              <div className="ss-buttons">
+                {thieves.map((index) => {
+                  const player = game.players[index]!;
+                  return (
+                    <button key={player.id} className="primary-button" type="button" disabled={busy} onClick={() => send({ type: "STEAL", target: player.id })}>
+                      偷{player.name}<small>手里 {player.handCount} 张</small>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {stage === "roundEnd" && playing && (
+              <div className="ss-buttons">
                 <button className="primary-button" type="button" disabled={busy || game.ready.includes(myId)} onClick={() => send({ type: "READY" })}>
                   {game.ready.includes(myId) ? "已准备" : "下一轮"}<small>N</small>
                 </button>
                 {hideSummary && <button className="quiet-button" type="button" onClick={() => setHideSummary(false)}>看结算</button>}
               </div>
             )}
-
-            <div className="f7-deck">
-              <CardBack />
-              <div>
-                <span>牌堆 <b>{game.deckCount}</b></span>
-                <span>弃牌 {game.discardCount}</span>
-              </div>
-              {risk !== null && (
-                <div className={risk >= 0.35 ? "f7-risk high" : "f7-risk"} title="牌堆里和你面前数字重复的牌占多少">
-                  <span>再要一张爆掉</span>
-                  <b>{me?.secondChance ? "0%" : `${Math.round(risk * 100)}%`}</b>
-                </div>
-              )}
-            </div>
-            {(error || shownNotice) && <p className={error ? "f7-feedback error" : "f7-feedback"} role={error ? "alert" : "status"}>{error || shownNotice}</p>}
+            {(error || shownNotice) && <p className={error ? "ss-feedback error" : "ss-feedback"} role={error ? "alert" : "status"}>{error || shownNotice}</p>}
           </section>
 
-          <section className="f7-panel f7-tabs">
-            <div className="f7-tab-bar" role="tablist">
+          <section className="ss-panel ss-tabs">
+            <div className="ss-tab-bar" role="tablist">
               <button type="button" role="tab" aria-selected={sideTab === "log"} className={sideTab === "log" ? "active" : ""} onClick={() => setSideTab("log")}>动作记录</button>
               <button type="button" role="tab" aria-selected={sideTab === "chat"} className={sideTab === "chat" ? "active" : ""} onClick={() => setSideTab("chat")}>
                 聊天{unread > 0 && <em>{unread}</em>}
               </button>
             </div>
             {sideTab === "log" ? (
-              <ul className="f7-log">{log.map((line) => <li key={line.key}>{line.text}</li>)}</ul>
+              <ul className="ss-log">{log.map((line) => <li key={line.key}>{line.text}</li>)}</ul>
             ) : (
-              <div className="f7-chat">{chat}</div>
+              <div className="ss-chat">{chat}</div>
             )}
           </section>
         </aside>
@@ -549,16 +857,19 @@ function GameBoard({ room, busy, error, notice, brand, connection, themeToggle, 
   );
 }
 
-function scoreParts(game: GameState, index: number): string {
+function scoreReason(game: GameState, index: number): string {
   const result = game.players[index]!.lastRound;
   if (!result) return "";
-  if (result.busted) return result.penalty ? `爆了 · 被罚 ${result.penalty}` : "爆了";
-  const parts = [`数字 ${result.numbers}`];
-  if (result.plus) parts.push(`+${result.plus}`);
-  if (result.doubled) parts.push("×2");
-  if (result.bonus) parts.push(`翻七 +${result.bonus}`);
-  if (result.penalty) parts.push(`被罚 ${result.penalty}`);
-  return parts.join(" · ");
+  switch (result.scored) {
+    case "none":
+      return "牌堆摸空，不计分";
+    case "cards":
+      return game.call?.kind === "lastChance" ? `宣告者赌输了，拿卡牌分 ${result.cardPoints}` : `卡牌分 ${result.cardPoints}`;
+    case "cards+bonus":
+      return `赌赢了：卡牌分 ${result.cardPoints} + 颜色奖励 ${result.colorBonus}`;
+    case "bonus":
+      return index === game.call?.player ? `赌输了：只拿颜色奖励 ${result.colorBonus}` : `只拿颜色奖励 ${result.colorBonus}`;
+  }
 }
 
 function RoundSummary({ game, myId, secondsLeft, busy, onReady, onHide }: {
@@ -569,32 +880,53 @@ function RoundSummary({ game, myId, secondsLeft, busy, onReady, onHide }: {
   onReady: () => void;
   onHide: () => void;
 }) {
-  const rows = game.players.map((player, index) => ({ player, index })).sort((a, b) => b.player.score - a.player.score);
+  const rows = game.players.map((player, index) => ({ player, index }));
   const target = game.config.targetScore;
   const ready = game.ready.includes(myId);
+  const reason = game.players[0]!.lastRound?.reason;
+  const caller = game.call ? game.players[game.call.player]! : null;
+  const betWon = caller && game.call?.kind === "lastChance" ? caller.lastRound?.scored === "cards+bonus" : null;
+  const title = reason === "emptyDeck"
+    ? "牌堆摸空了：这一轮不计分"
+    : reason === "stop"
+      ? `${caller?.id === myId ? "你" : caller?.name}宣告 STOP：每人拿卡牌分`
+      : `${caller?.id === myId ? "你" : caller?.name}的最后机会${betWon ? "赌赢了！" : "赌输了"}`;
   return (
-    <section className="f7-summary" aria-label={`第 ${game.round} 轮结算`}>
+    <section className="ss-summary" aria-label={`第 ${game.round} 轮结算`}>
       <header>
-        <h2>第 {game.round} 轮结算</h2>
+        <h2>第 {game.round} 轮 · {title}</h2>
         <button className="quiet-button" type="button" onClick={onHide}>看牌桌</button>
       </header>
       <ol>
         {rows.map(({ player, index }) => {
           const result = player.lastRound!;
+          const points = cardPoints(player.hand, player.played);
           return (
             <li key={player.id} className={player.id === myId ? "mine" : ""}>
-              <i className="f7-dot" style={{ background: seatColor(player.color) }} />
-              <span className="f7-sum-name">{player.name}{player.id === myId ? "（你）" : ""}<small>{scoreParts(game, index)}</small></span>
-              <b className={result.total < 0 ? "neg" : result.total === 0 ? "zero" : ""}>{result.total >= 0 ? `+${result.total}` : result.total}</b>
-              <span className="f7-sum-total">
+              <div className="ss-sum-who">
+                <i className="ss-dot" style={{ background: seatColor(player.color) }} />
+                <strong>{player.name}{player.id === myId ? "（你）" : ""}</strong>
+                <small>对子 {points.pairs} · 收集 {points.collectors} · 乘数 {points.multipliers} · 美人鱼 {points.mermaids} · 颜色奖励 {points.colorBonus}</small>
+              </div>
+              <div className="ss-sum-cards">
+                {player.played.flat().map((card) => <CardView key={card.id} card={card} className="mini" />)}
+                {player.played.length > 0 && player.hand.length > 0 && <span className="ss-sum-gap" />}
+                {sortCards(player.hand).map((card) => <CardView key={card.id} card={card} className="mini" />)}
+              </div>
+              <div className="ss-sum-score">
+                <b className={result.score === 0 ? "zero" : ""}>+{result.score}</b>
+                <small>{scoreReason(game, index)}</small>
+              </div>
+              <div className="ss-sum-total">
                 <strong>{player.score}</strong>
-                <span className="f7-bar"><i style={{ width: `${Math.max(0, Math.min(100, (player.score / target) * 100))}%` }} /></span>
-              </span>
+                <span className="ss-bar"><i style={{ width: `${Math.max(0, Math.min(100, (player.score / target) * 100))}%` }} /></span>
+              </div>
             </li>
           );
         })}
       </ol>
       <footer>
+        <span className="ss-muted">先到 {target} 分的那一轮打完，总分最高者获胜</span>
         <button className="primary-button" type="button" disabled={busy || ready} onClick={onReady}>
           {ready ? `等其他人 ${game.ready.length}/${game.players.length}` : "下一轮"}{secondsLeft !== null && <small>{secondsLeft}s</small>}
         </button>
@@ -607,26 +939,34 @@ function FinalDialog({ game, room, myId, onRematch }: { game: GameState; room: L
   const result = game.finalResult!;
   const accepted = room.rematch?.acceptedIds.includes(socket.id ?? "") ?? false;
   const won = (id: string) => result.winners.includes(id);
-  const rows = [...game.players].sort((a, b) => b.score - a.score);
-  const title = won(myId) ? (result.winners.length > 1 ? "并列获胜！" : "你赢了！") : `${result.winners.map((id) => game.players.find((p) => p.id === id)?.name).join("、")} 获胜`;
+  // 获胜者排最前（四美人鱼直接获胜时总分不一定最高），其余按总分、再按最后一轮。
+  const rows = [...game.players].sort((a, b) => Number(won(b.id)) - Number(won(a.id)) || b.score - a.score || (b.rounds.at(-1) ?? 0) - (a.rounds.at(-1) ?? 0));
+  const winnerNames = result.winners.map((id) => (id === myId ? "你" : game.players.find((p) => p.id === id)?.name)).join("、");
+  const title = won(myId) ? (result.winners.length > 1 ? "并列获胜！" : "你赢了！") : `${winnerNames} 获胜`;
+  const tie = !result.mermaids && result.winners.length === 1 && rows.filter((player) => player.score === rows[0]!.score).length > 1;
   return (
     <div className="gm-modal-backdrop" role="presentation">
-      <section className="gm-panel f7-final" role="dialog" aria-modal="true" aria-labelledby="f7-final-title">
-        <img className="f7-final-icon" src={art.flip7} alt="" />
-        <h2 id="f7-final-title">{title}</h2>
-        <p className="f7-muted">打了 {game.round} 轮，有人到了 {game.config.targetScore} 分，总分最高者获胜。</p>
-        <ol className="f7-standings">
+      <section className="gm-panel ss-final" role="dialog" aria-modal="true" aria-labelledby="ss-final-title">
+        <img className="ss-final-icon" src={art.card(result.mermaids ? "mermaid" : "lighthouse")} alt="" />
+        <h2 id="ss-final-title">{title}</h2>
+        <p className="ss-muted">
+          {result.mermaids
+            ? `${winnerNames}集齐了 4 张美人鱼，直接获胜。`
+            : `打了 ${game.round} 轮，有人到了 ${game.config.targetScore} 分，总分最高者获胜${tie ? "（总分一样，比最后一轮的得分）" : ""}。`}
+        </p>
+        <ol className="ss-standings">
           {rows.map((player, rank) => (
             <li key={player.id} className={won(player.id) ? "winner" : ""}>
-              <span className="f7-rank">{rank + 1}</span>
-              <i className="f7-dot" style={{ background: seatColor(player.color) }} />
+              <span className="ss-rank">{rank + 1}</span>
+              <i className="ss-dot" style={{ background: seatColor(player.color) }} />
               <strong>{player.name}{player.id === myId ? "（你）" : ""}</strong>
+              <small>{result.mermaids && won(player.id) ? "四张美人鱼" : `最后一轮 +${player.rounds.at(-1) ?? 0}`}</small>
               <b>{player.score}</b>
             </li>
           ))}
         </ol>
         {room.rematch && (
-          <div className="f7-rematch">
+          <div className="ss-rematch">
             <span>再来一局？还剩 {Math.ceil(room.rematch.remainingMs / 1000)} 秒（{room.rematch.acceptedIds.length}/{room.members.length} 人同意）</span>
             <div className="gm-panel-actions">
               <button className="quiet-button" type="button" onClick={() => onRematch(false)}>离开</button>

@@ -1,92 +1,121 @@
-import type { CSSProperties } from "react";
-import type { Card, CardKind } from "@seasalt/game";
-import { art, NUMBER_COLORS } from "./art.js";
+import type { CSSProperties, MouseEventHandler, ReactNode } from "react";
+import type { Card, CardColor, CardType } from "@seasalt/game";
+import { art, CARD_COLORS } from "./art.js";
 
-/** 牌的中文名（动作记录、提示里用）。 */
-export function cardName(card: Pick<Card, "kind" | "value">): string {
-  switch (card.kind) {
-    case "number":
-      return String(card.value);
-    case "plus":
-      return `+${card.value}`;
-    case "times2":
-      return "×2";
-    case "freeze":
-      return "冻结";
-    case "flipThree":
-      return "翻三";
-    case "secondChance":
-      return "二次机会";
-  }
-}
-
-export const ACTION_HELP: Record<Exclude<CardKind, "number">, string> = {
-  freeze: "冻结：目标立刻停牌，按已有的牌计分",
-  flipThree: "翻三：目标必须连翻 3 张，翻到重复就爆",
-  secondChance: "二次机会：抵消一次爆掉（重复的牌和它一起弃掉）",
-  plus: "修饰牌：结算时加分",
-  times2: "×2：结算时把分数翻倍",
+export const CARD_NAMES: Readonly<Record<CardType, string>> = {
+  crab: "蟹",
+  boat: "船",
+  fish: "鱼",
+  shark: "鲨鱼",
+  swimmer: "泳者",
+  shell: "贝壳",
+  octopus: "章鱼",
+  penguin: "企鹅",
+  sailor: "水手",
+  lighthouse: "灯塔",
+  shoal: "鱼群",
+  colony: "企鹅群",
+  captain: "船长",
+  mermaid: "美人鱼",
 };
 
-export function cardIcon(kind: CardKind): string | null {
-  switch (kind) {
-    case "freeze":
-      return art.freeze;
-    case "flipThree":
-      return art.flipThree;
-    case "secondChance":
-      return art.secondChance;
-    default:
-      return null;
-  }
+/** 牌面底下的一行小字。 */
+export const CARD_HINTS: Readonly<Record<CardType, string>> = {
+  crab: "一对·挑弃牌",
+  boat: "一对·再来",
+  fish: "一对·摸一张",
+  shark: "配泳者·偷牌",
+  swimmer: "配鲨鱼·偷牌",
+  shell: "0/2/4/6/8/10",
+  octopus: "0/3/6/9/12",
+  penguin: "1/3/5",
+  sailor: "0/5",
+  lighthouse: "每艘船 +1",
+  shoal: "每条鱼 +1",
+  colony: "每只企鹅 +2",
+  captain: "每个水手 +3",
+  mermaid: "数一种颜色",
+};
+
+/** 完整说明（鼠标悬停、规则里用）。 */
+export const CARD_HELP: Readonly<Record<CardType, string>> = {
+  crab: "蟹：两只凑一对，1 分。打出这一对：选一个弃牌堆，翻看整堆，挑一张拿进手里（别人不知道是哪张）。",
+  boat: "船：两艘凑一对，1 分。打出这一对：马上再来一回合。",
+  fish: "鱼：两条凑一对，1 分。打出这一对：从牌堆顶摸一张。",
+  shark: "鲨鱼：配一张泳者凑一对，1 分。打出这一对：从一位对手手里随机偷一张。",
+  swimmer: "泳者：配一张鲨鱼凑一对，1 分。打出这一对：从一位对手手里随机偷一张。",
+  shell: "贝壳：1 张 0 分，之后每多 1 张 +2（6 张 10 分）。",
+  octopus: "章鱼：1 张 0 分，之后每多 1 张 +3（5 张 12 分）。",
+  penguin: "企鹅：1 / 2 / 3 张得 1 / 3 / 5 分。",
+  sailor: "水手：1 张 0 分，2 张 5 分。",
+  lighthouse: "灯塔：你每有 1 艘船（手里和面前都算）+1 分。",
+  shoal: "鱼群：你每有 1 条鱼 +1 分。",
+  colony: "企鹅群：你每有 1 只企鹅 +2 分。",
+  captain: "船长：你每有 1 个水手 +3 分。",
+  mermaid: "美人鱼：第 1 张得你最多的那种颜色的张数，第 2 张得第二多的，依此类推（美人鱼自己算白色）。集齐 4 张立刻获胜。",
+};
+
+export function cardLabel(card: Pick<Card, "type" | "color">): string {
+  return `${CARD_COLORS[card.color].name}${CARD_NAMES[card.type]}`;
+}
+
+export function colorStyle(color: CardColor): CSSProperties {
+  const tone = CARD_COLORS[color];
+  return { "--cc": tone.bg, "--ck": tone.ink, "--ce": tone.edge } as CSSProperties;
 }
 
 interface CardViewProps {
-  readonly card: Pick<Card, "kind" | "value">;
+  readonly card: Pick<Card, "type" | "color">;
   readonly className?: string;
   readonly style?: CSSProperties | undefined;
-  readonly title?: string;
+  readonly title?: string | undefined;
+  /** 给了就是可以点的牌（按钮）。 */
+  readonly onClick?: MouseEventHandler<HTMLButtonElement> | undefined;
+  readonly onMouseEnter?: (() => void) | undefined;
+  readonly onMouseLeave?: (() => void) | undefined;
+  readonly disabled?: boolean | undefined;
+  /** 牌上叠一块提示（比如「拿这张」）。 */
+  readonly badge?: ReactNode | undefined;
 }
 
 /**
- * 一张牌。尺寸由外层的 CSS 变量决定：--cw 牌宽、--cf 数字字号（12 的整数倍）、--ci 图标边长（32 的整数倍）。
- * 数字牌 = 米色牌面 + 这个数字的颜色；修饰牌是金色牌面；行动牌是图标。
+ * 一张牌：整张是牌的颜色，中间一只白描边的像素小图，左上角名字、底下一行计分提示。
+ * 尺寸由外层 CSS 变量决定：--cw 牌宽。小图有两张：72px 的大图（大牌）和 36px 的小图（mini 小牌、或者外层加了
+ * small-cards 时的大牌），都按 1 倍显示，由 CSS 决定显示哪张。
  */
-export function CardView({ card, className = "", style, title }: CardViewProps) {
-  const name = cardName(card);
-  if (card.kind === "number") {
+export function CardView({ card, className = "", style, title, onClick, onMouseEnter, onMouseLeave, disabled, badge }: CardViewProps) {
+  const label = cardLabel(card);
+  const body = (
+    <>
+      <b className="ss-card-name">{CARD_NAMES[card.type]}</b>
+      <img className="big" src={art.card(card.type)} alt="" draggable={false} />
+      <img className="sm" src={art.cardSmall(card.type)} alt="" draggable={false} />
+      <small className="ss-card-hint">{CARD_HINTS[card.type]}</small>
+      {badge && <span className="ss-card-badge">{badge}</span>}
+    </>
+  );
+  const classes = `ss-card t-${card.type} c-${card.color} ${className}`;
+  const merged = { ...colorStyle(card.color), ...style };
+  const tip = title ?? `${label}　${CARD_HELP[card.type]}`;
+  if (onClick) {
     return (
-      <span
-        className={`f7-card num ${className}`}
-        style={{ "--c": NUMBER_COLORS[card.value] ?? "#333", ...style } as CSSProperties}
-        title={title ?? name}
-        aria-label={name}
-      >
-        <b>{card.value}</b>
-      </span>
-    );
-  }
-  if (card.kind === "plus" || card.kind === "times2") {
-    return (
-      <span className={`f7-card mod ${card.kind} ${className}`} style={style} title={title ?? ACTION_HELP[card.kind]} aria-label={name}>
-        <img src={card.kind === "plus" ? art.coins : art.double} alt="" />
-        <b>{name}</b>
-      </span>
+      <button type="button" className={classes} style={merged} title={tip} aria-label={label} onClick={onClick} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} disabled={disabled}>
+        {body}
+      </button>
     );
   }
   return (
-    <span className={`f7-card act ${card.kind} ${className}`} style={style} title={title ?? ACTION_HELP[card.kind]} aria-label={name}>
-      <img src={cardIcon(card.kind)!} alt="" />
-      <small>{name}</small>
+    <span className={classes} style={merged} title={tip} aria-label={label} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+      {body}
     </span>
   );
 }
 
-/** 牌背：深蓝条纹 + 金色徽记。 */
-export function CardBack({ className = "" }: { className?: string }) {
+/** 牌背：深海蓝底、白色波纹、中间一枚贝壳徽记。 */
+export function CardBack({ className = "", style }: { className?: string; style?: CSSProperties }) {
   return (
-    <span className={`f7-card back ${className}`} aria-label="牌背">
-      <img src={art.emblem} alt="" />
+    <span className={`ss-card back ${className}`} style={style} aria-label="牌背">
+      <img src={art.emblem} alt="" draggable={false} />
     </span>
   );
 }

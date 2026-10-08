@@ -17,8 +17,8 @@ import urllib.request
 API = "https://api.pixellab.ai/v2"
 ART = pathlib.Path(__file__).resolve().parent
 LEDGER = ART / "ledger.jsonl"
-# 翻七单独记账，先以 $3 为上限（牌背、牌面、行动牌和修饰牌图标、牌桌场景、动画、头像）。
-BUDGET_USD = float(os.environ.get("PIXELLAB_BUDGET_USD", "3"))
+# 海盐与纸单独记账，先以 $4 为上限（14 种牌的小图、牌背、沙滩牌桌、首页主图、头像、图标、动画）。
+BUDGET_USD = float(os.environ.get("PIXELLAB_BUDGET_USD", "4"))
 
 
 def _key() -> str:
@@ -169,7 +169,7 @@ DIRECTIONS = ["south", "south-east", "east", "north-east", "north", "north-west"
 def _download(url: str) -> bytes:
     """下载 PixelLab 返回的图片地址（预签名的图床链接）。不带 API key；
     图床会拒绝 Python 默认的 User-Agent，所以换一个普通的。"""
-    request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 cantstop-art"})
+    request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 seasalt-art"})
     with urllib.request.urlopen(request, timeout=120) as response:
         return response.read()
 
