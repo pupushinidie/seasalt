@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { LobbyRoomSnapshot, RoomSettings } from "@seasalt/game";
+import type { LobbyRoomSnapshot, RoomAccess } from "@seasalt/game";
 import { socket } from "./socket.js";
 
 /** 我在这个房间里的身份：坐着的玩家（可能是房主）还是观战的人。 */
@@ -8,7 +8,7 @@ export function roomRole(room: LobbyRoomSnapshot) {
   return { member, spectating: !member, isHost: member?.isHost ?? false };
 }
 
-const OPTIONS: { key: keyof RoomSettings; label: string; hint: string }[] = [
+const OPTIONS: { key: keyof RoomAccess; label: string; hint: string }[] = [
   { key: "allowSpectators", label: "允许观战", hint: "有房间码、或者从首页列表都能进来看" },
   { key: "spectatorsSeeAll", label: "观战看手牌", hint: "打开后观战的人能看到所有人的手牌；关掉只看公开信息" },
   { key: "open", label: "公开房间", hint: "不认识的人也能从首页列表直接加入空座位" },
@@ -21,7 +21,7 @@ export function RoomSettingsPanel({ room }: { room: LobbyRoomSnapshot }) {
   const { isHost } = roomRole(room);
   const [error, setError] = useState("");
   const done = (response: Ack) => setError(response.ok ? "" : response.error);
-  const toggle = (key: keyof RoomSettings) => socket.emit("room:settings", { [key]: !room.settings[key] }, done);
+  const toggle = (key: keyof RoomAccess) => socket.emit("room:access", { [key]: !room.access[key] }, done);
   const kick = (id: string) => socket.emit("room:kick", id, done);
 
   return (
@@ -29,8 +29,8 @@ export function RoomSettingsPanel({ room }: { room: LobbyRoomSnapshot }) {
       <div className="panel-label">房间设置 <span>{isHost ? "房主随时可以改" : "只有房主能改"}</span></div>
       <div className="room-settings-options">
         {OPTIONS.map((option) => {
-          const on = room.settings[option.key];
-          const off = option.key === "spectatorsSeeAll" && !room.settings.allowSpectators;
+          const on = room.access[option.key];
+          const off = option.key === "spectatorsSeeAll" && !room.access.allowSpectators;
           return (
             <button
               key={option.key}
@@ -46,7 +46,7 @@ export function RoomSettingsPanel({ room }: { room: LobbyRoomSnapshot }) {
           );
         })}
       </div>
-      {room.settings.allowSpectators && (
+      {room.access.allowSpectators && (
         <div className="room-spectators">
           <span>观战 {room.spectators.length} 人</span>
           {room.spectators.map((spectator) => (
@@ -70,7 +70,7 @@ export function SeatSwitch({ room }: { room: LobbyRoomSnapshot }) {
   const [error, setError] = useState("");
   if (room.status !== "waiting" || isHost) return null;
   const full = room.members.length >= room.capacity;
-  if (!spectating && !room.settings.allowSpectators) return null;
+  if (!spectating && !room.access.allowSpectators) return null;
   const done = (response: Ack) => setError(response.ok ? "" : response.error);
   return (
     <div className="seat-switch">
@@ -120,7 +120,7 @@ export function SpectateBar({ room, watchId, onWatch, onLeave }: {
   return (
     <div className="spectate-bar">
       <strong>观战中</strong>
-      <span className="spectate-hint">{room.settings.spectatorsSeeAll ? "能看到所有人的手牌" : "只看公开信息"} · 从谁的座位看：</span>
+      <span className="spectate-hint">{room.access.spectatorsSeeAll ? "能看到所有人的手牌" : "只看公开信息"} · 从谁的座位看：</span>
       <span className="spectate-seats">
         {players.map((player) => (
           <button

@@ -376,7 +376,7 @@ function GameBoard({ room, busy, error, notice, brand, connection, theme, themeT
   const spectating = !member;
   const myId = member?.playerId ?? watchId;
   const selfId = spectating ? "" : myId;
-  const peek = spectating && room.settings.spectatorsSeeAll;
+  const peek = spectating && room.access.spectatorsSeeAll;
   const isHost = member?.isHost ?? false;
   const myIndex = game.players.findIndex((player) => player.id === myId);
   const me = game.players[myIndex];

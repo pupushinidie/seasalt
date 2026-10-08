@@ -7,7 +7,7 @@ import type {
   JoinRoomPayload,
   LobbyRoomSnapshot,
   PublicRoomSummary,
-  RoomSettings,
+  RoomAccess,
   ServerToClientEvents,
 } from "@seasalt/game";
 
@@ -42,8 +42,8 @@ function call<T>(send: (ack: (response: AckResponse<T>) => void) => void): Promi
   return new Promise((resolve) => send(resolve));
 }
 
-function settings(client: TestSocket, value: Partial<RoomSettings>): Promise<AckResponse<void>> {
-  return call((ack) => client.emit("room:settings", value, ack));
+function settings(client: TestSocket, value: Partial<RoomAccess>): Promise<AckResponse<void>> {
+  return call((ack) => client.emit("room:access", value, ack));
 }
 
 function lobby(client: TestSocket): Promise<PublicRoomSummary[]> {
@@ -90,7 +90,7 @@ describe("观战和公开房间", () => {
   it("新房间默认可观战、不公开；陌生人从列表只能观战，房主打开公开后才能坐下", async () => {
     const host = await connect();
     const room = await create(host, "房主甲");
-    expect(room.settings).toEqual({ allowSpectators: true, spectatorsSeeAll: false, open: false });
+    expect(room.access).toEqual({ allowSpectators: true, spectatorsSeeAll: false, open: false });
 
     const stranger = await connect();
     const summary = (await lobby(stranger)).find((candidate) => candidate.players[0]?.name === "房主甲")!;
@@ -139,13 +139,13 @@ describe("观战和公开房间", () => {
     const invitedViewer = await join(viewer, { name: "看客丙", code: room.code, spectate: true });
     expect(invitedViewer.ok && invitedViewer.data.code).toBe(room.code);
 
-    const started = nextUpdate(viewer);
+    const started = updateWhere(viewer, (snapshot) => snapshot.game !== undefined);
     expect((await call<LobbyRoomSnapshot>((ack) => host.emit("room:start", ack))).ok).toBe(true);
     const view = await started;
     expect(view.game?.players.every((player) => player.hand.length === 0)).toBe(true);
     expect(view.game?.deck).toBeUndefined();
 
-    const reveal = updateWhere(viewer, (snapshot) => snapshot.settings.spectatorsSeeAll);
+    const reveal = updateWhere(viewer, (snapshot) => snapshot.access.spectatorsSeeAll);
     expect((await settings(host, { spectatorsSeeAll: true })).ok).toBe(true);
     const godView = await reveal;
     expect(godView.game?.players.every((player) => player.hand.length === player.handCount)).toBe(true);

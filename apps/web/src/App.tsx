@@ -530,7 +530,7 @@ function RoomView({
               {Array.from({ length: openSeats }, (_, index) => (
                 <div className="player-row open-seat" key={`open-${index}`}>
                   <div className="empty-avatar"><span>＋</span></div>
-                  <div className="player-details"><strong>等待玩家加入</strong><span>{room.settings.open ? "公开房间，路过的人也能加入" : "分享房间码邀请朋友"}</span></div>
+                  <div className="player-details"><strong>等待玩家加入</strong><span>{room.access.open ? "公开房间，路过的人也能加入" : "分享房间码邀请朋友"}</span></div>
                 </div>
               ))}
             </div>
@@ -557,7 +557,7 @@ function RoomView({
 
       {error && <p className="feedback feedback-error room-feedback" role="alert">{error}</p>}
       {notice && <p className="feedback feedback-success room-feedback" role="status">{notice}</p>}
-      <div className="room-secure-note"><span>◇</span> {room.settings.open ? "公开房间：首页列表里的人可以直接加入空座位。" : "邀请制：要有房间码才能加入；首页列表不显示房间码。"}</div>
+      <div className="room-secure-note"><span>◇</span> {room.access.open ? "公开房间：首页列表里的人可以直接加入空座位。" : "邀请制：要有房间码才能加入；首页列表不显示房间码。"}</div>
     </section>
   );
 }

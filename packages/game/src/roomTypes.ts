@@ -14,7 +14,7 @@ export interface LobbyMember {
 }
 
 /** 房主在房间里随时可以改的设置。 */
-export interface RoomSettings {
+export interface RoomAccess {
 	/** 允许观战：有房间码、或者从首页列表都能进来看。 */
 	readonly allowSpectators: boolean;
 	/** 观战的人能看到所有人的手牌（上帝视角）；关掉时只看公开信息。牌堆顺序始终看不到。 */
@@ -23,7 +23,7 @@ export interface RoomSettings {
 	readonly open: boolean;
 }
 
-export const DEFAULT_ROOM_SETTINGS: RoomSettings = { allowSpectators: true, spectatorsSeeAll: false, open: false };
+export const DEFAULT_ROOM_ACCESS: RoomAccess = { allowSpectators: true, spectatorsSeeAll: false, open: false };
 
 /** 观战的人：不占座位，不能操作、投票或进语音，可以聊天。 */
 export interface Spectator {
@@ -37,7 +37,7 @@ export interface LobbyRoomSnapshot {
 	readonly status: "waiting" | "playing";
 	readonly members: LobbyMember[];
 	readonly spectators: Spectator[];
-	readonly settings: RoomSettings;
+	readonly access: RoomAccess;
 	readonly chat: RoomChatMessage[];
 	readonly game?: GameState;
 	/** 当前这一步剩余的毫秒数（发送时）；超时自动处理，见 timeoutTurn。 */
@@ -129,7 +129,7 @@ export interface ClientToServerEvents {
 	"lobby:get": (ack: RoomAck<PublicRoomSummary[]>) => void;
 	"room:rematch": (accept: boolean, ack: RoomAck<void>) => void;
 	"room:kick": (memberId: string, ack: RoomAck<void>) => void;
-	"room:settings": (settings: Partial<RoomSettings>, ack: RoomAck<void>) => void;
+	"room:access": (settings: Partial<RoomAccess>, ack: RoomAck<void>) => void;
 	/** 等待中：观战的人坐到空座位上 / 玩家（房主除外）改成观战。 */
 	"room:sit": (ack: RoomAck<void>) => void;
 	"room:stand": (ack: RoomAck<void>) => void;

@@ -8,7 +8,7 @@ import {
   applyCommand,
   CAPACITY_OPTIONS,
   createGame,
-  DEFAULT_ROOM_SETTINGS,
+  DEFAULT_ROOM_ACCESS,
   redactGameForViewer,
   timeoutTurn,
   timerKey,
@@ -23,7 +23,7 @@ import {
   type LobbyRoomSnapshot,
   type PublicRoomSummary,
   type RoomChatMessage,
-  type RoomSettings,
+  type RoomAccess,
   type ServerToClientEvents,
   type Spectator,
   type VoiceSignal,
@@ -41,7 +41,7 @@ interface RoomState {
   spectators: Spectator[];
   /** 拿房间码进来（或者本来坐着改成观战）的观战者：看得到房间码，也能坐下。从列表进来的只有公开房间才能坐下。 */
   invited: Set<string>;
-  settings: RoomSettings;
+  access: RoomAccess;
   chat: RoomChatMessage[];
   game?: GameState;
   /** 下一位加入者的座位编号；座位 id 在对局里固定，断线重连只换连接 id。 */
@@ -159,7 +159,7 @@ function snapshot(room: RoomState, viewerId: string): LobbyRoomSnapshot {
     status: room.status,
     members: room.members.map((member) => ({ ...member })),
     spectators: room.spectators.map((spectator) => ({ ...spectator })),
-    settings: { ...room.settings },
+    access: { ...room.access },
     chat: room.chat.map((entry) => ({ ...entry })),
     voice: [...room.voice].map(([id, state]) => ({ id, muted: state.muted })),
     ...(room.turn ? { turnRemainingMs: Math.max(0, room.turn.deadline - Date.now()) } : {}),
@@ -174,7 +174,7 @@ function snapshot(room: RoomState, viewerId: string): LobbyRoomSnapshot {
  */
 function spectatorGame(room: RoomState): GameState {
   const game = room.game!;
-  if (!room.settings.spectatorsSeeAll) return redactGameForViewer(game, "");
+  if (!room.access.spectatorsSeeAll) return redactGameForViewer(game, "");
   const base = redactGameForViewer(game, game.players[game.actor]?.id ?? "");
   return {
     ...base,
@@ -204,8 +204,8 @@ function roomSummaries(): PublicRoomSummary[] {
         id: room.publicId,
         status,
         capacity: room.capacity,
-        open: room.settings.open,
-        allowSpectators: room.settings.allowSpectators,
+        open: room.access.open,
+        allowSpectators: room.access.allowSpectators,
         spectators: room.spectators.length,
         ...(game ? { round: game.round } : {}),
         players: room.members.map((member) => {
@@ -576,7 +576,7 @@ io.on("connection", (socket) => {
       nextSeat: 2,
       spectators: [],
       invited: new Set(),
-      settings: { ...DEFAULT_ROOM_SETTINGS },
+      access: { ...DEFAULT_ROOM_ACCESS },
       chat: [],
       voice: new Map(),
     };
@@ -622,7 +622,7 @@ io.on("connection", (socket) => {
     const name = normalizeName(payload.name)!;
 
     if (payload.spectate === true) {
-      if (!room.settings.allowSpectators) {
+      if (!room.access.allowSpectators) {
         ack({ ok: false, error: "这个房间没有开放观战。" });
         return;
       }
@@ -667,7 +667,7 @@ io.on("connection", (socket) => {
       emitRoomUpdate(room);
       return;
     }
-    if (viaList && !room.settings.open) {
+    if (viaList && !room.access.open) {
       ack({ ok: false, error: "这个房间是邀请制，要有房间码才能加入。" });
       return;
     }
@@ -694,13 +694,13 @@ io.on("connection", (socket) => {
     emitRoomUpdate(room);
   });
 
-  socket.on("room:settings", (settings, ack) => {
+  socket.on("room:access", (settings, ack) => {
     const room = findRoomForSocket(socket.id);
     if (!room || room.ownerId !== socket.id) {
       ack({ ok: false, error: "只有房主可以修改房间设置。" });
       return;
     }
-    const next = { ...room.settings };
+    const next = { ...room.access };
     for (const key of ["allowSpectators", "spectatorsSeeAll", "open"] as const) {
       const value = settings?.[key];
       if (value === undefined) continue;
@@ -710,7 +710,7 @@ io.on("connection", (socket) => {
       }
       next[key] = value;
     }
-    room.settings = next;
+    room.access = next;
     if (!next.allowSpectators && room.spectators.length > 0) {
       for (const spectator of room.spectators) closeMemberConnection(room, spectator.id, "房主关闭了观战。");
       room.spectators = [];
@@ -735,7 +735,7 @@ io.on("connection", (socket) => {
       ack({ ok: false, error: "座位已经满了。" });
       return;
     }
-    if (!room.settings.open && !room.invited.has(socket.id)) {
+    if (!room.access.open && !room.invited.has(socket.id)) {
       ack({ ok: false, error: "这个房间是邀请制，要有房间码才能坐下。" });
       return;
     }
@@ -761,7 +761,7 @@ io.on("connection", (socket) => {
       ack({ ok: false, error: "房主不能改成观战。" });
       return;
     }
-    if (!room.settings.allowSpectators) {
+    if (!room.access.allowSpectators) {
       ack({ ok: false, error: "这个房间没有开放观战。" });
       return;
     }
