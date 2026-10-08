@@ -965,7 +965,7 @@ function RoundSummary({ game, myId, secondsLeft, busy, onReady, onHide }: {
               <div className="ss-sum-who">
                 <i className="ss-dot" style={{ background: seatColor(player.color) }} />
                 <strong>{player.name}{player.id === myId ? "（你）" : ""}</strong>
-                <small><span>对子 {points.pairs} · 收集 {points.collectors} · 乘数 {points.multipliers} · 美人鱼 {points.mermaids}</span><span>颜色奖励 {points.colorBonus}</span></small>
+                <small><span>对子&nbsp;{points.pairs} · 收集&nbsp;{points.collectors} · 乘数&nbsp;{points.multipliers} · 美人鱼&nbsp;{points.mermaids}</span><span>颜色奖励&nbsp;{points.colorBonus}</span></small>
               </div>
               <div className="ss-sum-cards">
                 {player.played.flat().map((card) => <CardView key={card.id} card={card} className="mini" />)}

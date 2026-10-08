@@ -383,7 +383,7 @@ button.ss-opp.pickable:hover { filter: brightness(1.15); }
 .ss-sum-who small { display: flex; flex-basis: 100%; flex-direction: column; color: var(--muted); font-size: 12px; }
 .ss-sum-who small span { white-space: nowrap; }
 .ss-sum-cards { display: flex; min-width: 0; flex-wrap: wrap; gap: 2px; }
-.ss-sum-cards .ss-card.mini { --mw: 32px; }
+.ss-sum-cards .ss-card.mini { --mw: 36px; } /* 和 36px 小图同宽，不裁掉描边 */
 .ss-sum-gap { width: 8px; }
 .ss-sum-score { display: flex; flex-direction: column; gap: 2px; }
 .ss-sum-score b { color: var(--gold); font-size: 36px; font-weight: 400; line-height: 1; }
@@ -395,6 +395,14 @@ button.ss-opp.pickable:hover { filter: brightness(1.15); }
 .ss-bar i { position: absolute; inset: 0 auto 0 0; background: var(--gold); }
 .app-shell .ss-summary footer .primary-button { display: flex; flex: 0 0 auto; width: auto; align-items: center; gap: 10px; min-height: 48px; margin: 0; padding: 0 32px; font-size: 24px; }
 .app-shell .ss-summary footer .primary-button small { font-size: 12px; }
+/* 结算框按自身宽度排版（平板上牌桌只有 ~660px，四列放不下牌） */
+.ss-summary { container-type: inline-size; }
+@container (min-width: 480px) and (max-width: 900px) {
+  .ss-summary li { grid-template-columns: minmax(150px, 0.8fr) minmax(0, 2fr) auto auto; }
+  .ss-sum-who small span { white-space: normal; }
+  .ss-sum-total .ss-bar { display: none; }
+  .ss-sum-total strong { width: auto; }
+}
 
 /* ---------- 终局 ---------- */
 .app-shell .gm-panel.ss-final { width: min(520px, 100%); max-height: calc(100vh - 48px); overflow-y: auto; text-align: center; }
@@ -404,8 +412,8 @@ button.ss-opp.pickable:hover { filter: brightness(1.15); }
 .ss-standings > li { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--panel-2); box-shadow: 0 0 0 var(--px) var(--edge); }
 .ss-standings > li.winner { box-shadow: 0 0 0 var(--px) var(--edge), inset 0 0 0 var(--px) var(--gold); }
 .ss-rank { width: 24px; color: var(--muted); font-size: 24px; }
-.ss-standings strong { flex: 1; min-width: 0; color: var(--text); font-size: 24px; font-weight: 400; }
-.ss-standings small { color: var(--muted); font-size: 12px; }
+.ss-standings strong { flex: 1; min-width: 0; overflow: hidden; color: var(--text); font-size: 24px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+.ss-standings small { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .ss-standings > li.winner strong, .ss-standings > li.winner .ss-rank { color: var(--gold); }
 .ss-standings b { min-width: 40px; color: var(--text); font-size: 24px; font-weight: 400; text-align: right; }
 .ss-rematch { margin-top: 16px; color: var(--muted); font-size: 12px; text-align: left; }
@@ -538,16 +546,39 @@ button.ss-opp.pickable:hover { filter: brightness(1.15); }
   .ss-room .room-heading { margin-bottom: 14px; }
   .ss-room .room-heading p { display: none; }
   .ss-room .player-panel .field-hint { margin: 8px 0; }
+  /* 矮屏：玩家行和按钮上方的空隙收紧，1 人时「还需要至少 1 位玩家加入」也放得下 */
+  .ss-room .player-row { min-height: 50px; }
+  .app-shell.ss-room .room-actions .primary-button { margin-top: 6px; }
+  .ss-room .room-actions .field-hint.centered { margin: 6px 0 0; }
 }
+/* 平板：左栏房间码 + 牌一览（三列），右栏上面玩家（两列）、下面聊天。原来房间码横跨整行，牌一览把玩家和「开始对局」挤出屏幕 */
 @media (min-width: 760px) and (max-width: 1180px) {
-  .ss-room .room-grid { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
-  .ss-room .room-code-panel { grid-column: 1 / -1; }
+  .ss-room .room-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); align-items: stretch; }
+  .ss-room .room-code-panel { grid-column: 1; grid-row: 1 / 3; min-height: 0; overflow-y: auto; }
+  .ss-room .player-panel { grid-column: 2; grid-row: 1; }
+  .ss-room .ss-room-chat { grid-column: 2; grid-row: 2; }
+  .ss-room-cards ul { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+/* 矮的平板（横屏 1024×690 等）放不下牌一览 + 玩家 + 聊天：用桌面的三栏，牌一览收起（计分说明在「规则」里） */
+@media (min-width: 760px) and (max-width: 1180px) and (max-height: 820px) {
+  .ss-room .room-grid { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1fr); grid-template-rows: none; align-items: start; }
+  .ss-room .room-code-panel, .ss-room .player-panel { grid-row: auto; grid-column: auto; }
+  .ss-room .ss-room-chat { grid-row: auto; grid-column: auto; align-self: stretch; }
+  .ss-room-cards { display: none; }
 }
 @media (max-width: 759px) {
   .app-shell.ss-room { width: calc(100% - 32px); }
   .ss-room .room-layout { padding-top: 16px; }
-  .ss-room .room-grid { display: flex; flex-direction: column; }
+  .ss-room .room-grid { display: flex; flex-direction: column; align-items: stretch; }
   .app-shell.ss-room .room-chat-list { height: 210px; flex: 0 0 auto; }
+  /* 手机上牌一览太长，会把「开始对局」挤到第一屏外；计分说明在「规则」里都有 */
+  .ss-room-cards { display: none; }
+  .ss-room .room-heading { margin-bottom: 12px; }
+  .ss-room .room-heading p { display: none; }
+  /* 「开始对局」要在第一屏：规则说明挪到按钮下面，玩家行压矮一点 */
+  .ss-room .player-panel { display: flex; flex-direction: column; }
+  .ss-room .player-panel > .field-hint { order: 3; }
+  .ss-room .player-row { min-height: 48px; }
 }
 
 
@@ -569,11 +600,7 @@ button.ss-opp.pickable:hover { filter: brightness(1.15); }
 .ss-screen.mobile .ss-pair-icons img { width: 36px; height: 36px; }
 .ss-screen.mobile .ss-pair-icons img + img { margin-left: -20px; }
 .app-shell .ss-screen.mobile :is(.ss-buttons, .ss-declare) button { min-height: 44px; }
-.ss-screen.mobile .ss-action:has(.ss-declare) { display: grid; grid-template-columns: 1fr 1fr 1fr; }
-.ss-screen.mobile .ss-action:has(.ss-declare) > :not(.ss-declare, .ss-buttons) { grid-column: 1 / -1; }
-.ss-screen.mobile .ss-action:has(.ss-declare) .ss-declare { grid-column: 1 / 3; }
-.ss-screen.mobile .ss-action:has(.ss-declare) .ss-buttons { grid-column: 3; }
-.app-shell .ss-screen.mobile .ss-action:has(.ss-declare) .ss-buttons button { height: 100%; flex-direction: column; gap: 4px; }
+/* STOP / 最后机会两格一行，结束回合单独一行（三格一行时每格只有 ~110px，「最后机会」放不下） */
 .ss-screen.mobile .ss-me-played:has(.ss-muted) { display: none; }
 .ss-screen.mobile .ss-opps { grid-template-columns: minmax(0, 1fr); }
 .ss-screen.mobile .ss-me-head { flex-wrap: wrap; }
@@ -588,6 +615,9 @@ button.ss-opp.pickable:hover { filter: brightness(1.15); }
 .ss-screen.mobile .ss-summary li { grid-template-columns: minmax(0, 1fr) auto; }
 .ss-screen.mobile .ss-sum-cards { grid-column: 1 / -1; grid-row: 2; }
 .ss-screen.mobile .ss-sum-total { display: none; }
+/* 终局名次：手机上「最后一轮 +N」放到名字下面，名字不被挤成省略号 */
+.ss-screen.mobile .ss-standings > li { flex-wrap: wrap; row-gap: 0; }
+.ss-screen.mobile .ss-standings small { order: 5; flex-basis: 100%; padding-left: 52px; }
 
 @media (prefers-reduced-motion: reduce) {
   .ss-card.fresh, .ss-pile.fresh .ss-card, .ss-call-chip, .ss-banner, .ss-fx { animation: none; }

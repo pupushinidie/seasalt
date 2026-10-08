@@ -49,6 +49,13 @@ function App() {
   const [lobbyRooms, setLobbyRooms] = useState<PublicRoomSummary[]>([]);
   const voice = useVoice(room);
 
+  // 「房间已创建」「房间码已复制」这类临时提示 4 秒后自动消失，不一直挂在页面上。
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(""), 4000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+
   // 在房间里时服务端不推送在线牌桌列表；回到首页时主动拉一次最新的。
   useEffect(() => {
     if (room || !socket.connected) return;
