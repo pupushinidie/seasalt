@@ -71,10 +71,10 @@ def build() -> dict:
     emblems = [(f"e{n}", gallery.copy_in(R1 / "emblem" / ("emblem.png" if n == 0 else f"emblem-{n}.png"), "emblem"), label) for n, label in ((56, "白贝壳 + 米色外圈（现在用的）"), (0, "白贝壳 + 蓝圈"), (31, "白贝壳 + 浅色外圈"), (40, "浪花"))]
     items.append(gallery.image_item("emblem", "牌背中间的徽记（也是网页图标）", "", emblems, "e56", scale=3))
     items.append(gallery.image_item("avatars", "座位头像（一组 4 个，边框是座位色）", "", [
-        ("A", avatar_set("A", [3, 26, 2, 13]), "海星 / 海豹 / 海龟 / 海鸥（现在用的）"),
-        ("B", avatar_set("B", [27, 9, 16, 24]), "换一组同类的"),
+        ("A", avatar_set("A", [3, 26, 2, 13]), "海星 / 海豹 / 海龟 / 海鸥（第一版）"),
+        ("B", avatar_set("B", [27, 9, 16, 24]), "换一组同类的（你选的，现在用的）"),
         ("C", avatar_set("C", [46, 43, 61, 29]), "螃蟹 / 蓝鸟 / 青蛙 / 小黄鸭"),
-    ], "A", scale=1))
+    ], "B", scale=1))
     return {
         "round": "r1",
         "title": "海盐与纸 · 第一轮：牌面和场景",
