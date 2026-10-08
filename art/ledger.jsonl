@@ -13,3 +13,17 @@
 {"time": "2026-10-08 00:37:02", "name": "colony", "endpoint": "/generate-image-v2", "usage": {"type": "usd", "usd": 0.095}, "seconds": 94.8, "status": "completed"}
 {"time": "2026-10-08 00:39:09", "name": "captain", "endpoint": "/generate-image-v2", "usage": {"type": "usd", "usd": 0.095}, "seconds": 126.1, "status": "completed"}
 {"time": "2026-10-08 00:41:25", "name": "avatar", "endpoint": "/generate-image-v2", "usage": {"type": "usd", "usd": 0.095}, "seconds": 132.9, "status": "completed"}
+{"time": "2026-10-08 00:44:10", "name": "emblem", "endpoint": "/generate-image-v2", "usage": {"type": "usd", "usd": 0.095}, "seconds": 165.2, "status": "completed"}
+{"time": "2026-10-08 00:45:15", "name": "beach-day-s31", "endpoint": "/create-image-pixen", "usage": {"type": "usd", "usd": 0.011466203875011868}, "seconds": 64.3}
+{"time": "2026-10-08 00:46:22", "name": "beach-day-s32", "endpoint": "/create-image-pixen", "usage": {"type": "usd", "usd": 0.01005950551562839}, "seconds": 67.0}
+{"time": "2026-10-08 00:47:31", "name": "beach-day-s33", "endpoint": "/create-image-pixen", "usage": {"type": "usd", "usd": 0.010379022730721367}, "seconds": 69.0}
+{"time": "2026-10-08 00:48:43", "name": "beach-night-s41", "endpoint": "/create-image-pixen", "usage": {"type": "usd", "usd": 0.010118204328748916}, "seconds": 71.9}
+{"time": "2026-10-08 00:49:33", "name": "beach-night-s42", "endpoint": "/create-image-pixen", "usage": {"type": "usd", "usd": 0.009519106732474433}, "seconds": 50.3}
+{"time": "2026-10-08 00:50:46", "name": "beach-night-s43", "endpoint": "/create-image-pixen", "usage": {"type": "usd", "usd": 0.010034171793195937}, "seconds": 72.5}
+{"time": "2026-10-08 00:51:57", "name": "hero-s51", "endpoint": "/create-image-pixen", "usage": {"type": "usd", "usd": 0.010288550191455418}, "seconds": 71.7}
+{"time": "2026-10-08 00:53:14", "name": "hero-s52", "endpoint": "/create-image-pixen", "usage": {"type": "usd", "usd": 0.010640810171763103}, "seconds": 76.8}
+{"time": "2026-10-08 00:54:25", "name": "hero-s53", "endpoint": "/create-image-pixen", "usage": {"type": "usd", "usd": 0.01006425182024638}, "seconds": 71.1}
+{"time": "2026-10-08 00:57:56", "name": "mermaid2", "endpoint": "/generate-image-v2", "usage": {"type": "usd", "usd": 0.095}, "seconds": 207.0, "status": "completed"}
+{"time": "2026-10-08 01:00:01", "name": "icon-stop", "endpoint": "/generate-image-v2", "usage": {"type": "usd", "usd": 0.095}, "seconds": 122.1, "status": "completed"}
+{"time": "2026-10-08 01:01:43", "name": "icon-last", "endpoint": "/generate-image-v2", "usage": {"type": "usd", "usd": 0.095}, "seconds": 102.2, "status": "completed"}
+{"time": "2026-10-08 01:03:50", "name": "fx-crab-s31", "endpoint": "/animate-with-text-v3", "usage": {"type": "usd", "usd": 0.029889364090230727}, "seconds": 126.9, "status": "completed"}

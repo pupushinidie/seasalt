@@ -631,7 +631,7 @@ function GameBoard({ room, busy, error, notice, brand, connection, theme, themeT
         <div className="ss-round">
           <span>第 <b>{game.round}</b> 轮</span>
           <span className="ss-goal">先到 <b>{game.config.targetScore}</b> 分</span>
-          {callChip && <span className="ss-call-chip">{callChip}</span>}
+          {callChip && <span className="ss-call-chip"><img src={game.call?.kind === "stop" ? art.iconStop : art.iconLast} alt="" />{callChip}</span>}
         </div>
         <div className="ss-topbar-right">
           {themeToggle}
@@ -775,7 +775,7 @@ function GameBoard({ room, busy, error, notice, brand, connection, theme, themeT
 
           {bannerOn && announcement && (
             <div className={`ss-banner ${announcement.call}`} role="status">
-              <b>{announcement.player === myId ? "你" : nameOf(announcement.player)}宣告{announcement.call === "stop" ? " STOP！" : "最后机会！"}</b>
+              <b><img src={announcement.call === "stop" ? art.iconStop : art.iconLast} alt="" />{announcement.player === myId ? "你" : nameOf(announcement.player)}宣告{announcement.call === "stop" ? " STOP！" : "最后机会！"}</b>
               <small>{announcement.call === "stop" ? "本轮立刻结束，每人拿卡牌分" : `卡牌分 ${announcement.points}，赌自己最高；其他人各打最后一回合`}</small>
             </div>
           )}
@@ -850,10 +850,10 @@ function GameBoard({ room, busy, error, notice, brand, connection, theme, themeT
                 {declareOk && (
                   <div className="ss-declare">
                     <button className="quiet-button ss-stop" type="button" disabled={busy} onClick={() => send({ type: "STOP" })} title="本轮立刻结束，所有人拿自己的卡牌分">
-                      STOP<small>立刻结算 · S</small>
+                      <span><img src={art.iconStop} alt="" />STOP</span><small>立刻结算 · S</small>
                     </button>
                     <button className="quiet-button ss-last" type="button" disabled={busy} onClick={() => send({ type: "LAST_CHANCE" })} title="其他人各再打一回合；你分最高（平分也算）就拿卡牌分 + 颜色奖励，他们只拿颜色奖励；否则反过来">
-                      最后机会<small>赌你最高 · L</small>
+                      <span><img src={art.iconLast} alt="" />最后机会</span><small>赌你最高 · L</small>
                     </button>
                   </div>
                 )}
@@ -965,7 +965,7 @@ function RoundSummary({ game, myId, secondsLeft, busy, onReady, onHide }: {
               <div className="ss-sum-who">
                 <i className="ss-dot" style={{ background: seatColor(player.color) }} />
                 <strong>{player.name}{player.id === myId ? "（你）" : ""}</strong>
-                <small>对子 {points.pairs} · 收集 {points.collectors} · 乘数 {points.multipliers} · 美人鱼 {points.mermaids} · 颜色奖励 {points.colorBonus}</small>
+                <small><span>对子 {points.pairs} · 收集 {points.collectors} · 乘数 {points.multipliers} · 美人鱼 {points.mermaids}</span><span>颜色奖励 {points.colorBonus}</span></small>
               </div>
               <div className="ss-sum-cards">
                 {player.played.flat().map((card) => <CardView key={card.id} card={card} className="mini" />)}

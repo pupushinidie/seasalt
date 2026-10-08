@@ -28,6 +28,7 @@ gallery.CARD_CANDIDATES.update({
     "shoal": [("shoal-6", "深蓝小鱼围成一圈（灰色牌上看得清）"), ("shoal", "银蓝、五条"), ("shoal-4", "围成一圈、颜色浅"), ("shoal-3", "四条")],
     "colony": [("colony-2", "三只企鹅戴不同颜色的围巾"), ("colony", "三只、冰块"), ("colony-13", "五只挤在一起"), ("colony-3", "三只、站位错开")],
     "captain": [("captain-15", "深蓝外套 + 烟斗"), ("captain-3", "深蓝外套"), ("captain-7", "深蓝外套、锚扣"), ("captain-12", "独眼罩 + 烟斗")],
+    "mermaid": [("mermaid2-1", "挥手、鱼尾露得最清楚"), ("mermaid2", "挥手"), ("mermaid2-2", "双手举起"), ("mermaid2-3", "托腮笑")],
 })
 
 
@@ -61,6 +62,14 @@ def build() -> dict:
     items = gallery.build()
     for item in items:
         item["note"] = "现在牌桌上用的是标「推荐」的那张。每个候选贴在这种牌真实会有的两种颜色上（放大 2 倍）。"
+    for item in items:
+        if item["id"] == "card-mermaid":
+            item["note"] += "\n第一批美人鱼是红色长发 + 青绿鱼尾 + 贝壳胸衣，太像某部动画电影里的人鱼公主（网站收费，撞脸有风险），换成深棕短发、珊瑚色鱼尾、海星发夹重画了。"
+    items.append(scene_item("beach-night", "牌桌 · 夜间（月光沙滩）", "512×288，按整数倍放大铺满牌桌，显示下半部（干沙），上面盖一层淡淡的深色。", "beach-night", (41, 42, 43), 41))
+    items.append(scene_item("beach-day", "牌桌 · 白天（晴天沙滩）", "白天版用这张，显示下半部，上面盖一层淡淡的白色。", "beach-day", (31, 32, 33), 32))
+    items.append(scene_item("hero", "首页主图", "", "hero", (51, 52, 53), 52))
+    emblems = [(f"e{n}", gallery.copy_in(R1 / "emblem" / ("emblem.png" if n == 0 else f"emblem-{n}.png"), "emblem"), label) for n, label in ((56, "白贝壳 + 米色外圈（现在用的）"), (0, "白贝壳 + 蓝圈"), (31, "白贝壳 + 浅色外圈"), (40, "浪花"))]
+    items.append(gallery.image_item("emblem", "牌背中间的徽记（也是网页图标）", "", emblems, "e56", scale=3))
     items.append(gallery.image_item("avatars", "座位头像（一组 4 个，边框是座位色）", "", [
         ("A", avatar_set("A", [3, 26, 2, 13]), "海星 / 海豹 / 海龟 / 海鸥（现在用的）"),
         ("B", avatar_set("B", [27, 9, 16, 24]), "换一组同类的"),

@@ -95,7 +95,8 @@ button.ss-card.pickable:hover:not(:disabled), .ss-card.lifted { transform: trans
   white-space: nowrap;
 }
 /* 牌上的「拿了 +N 分」 */
-.ss-card-badge:has(.ss-gain) { color: var(--ck); background: rgba(255, 255, 255, 0.82); }
+.ss-card-badge:has(.ss-gain) { color: var(--ck); background: rgba(255, 255, 255, 0.9); }
+.ss-card:has(.ss-card-badge) .ss-card-hint { visibility: hidden; }
 .ss-gain { color: #5b6a86; }
 .ss-gain.up { color: #1f7a3c; }
 /* 新拿到的牌：翻进来 */
@@ -133,7 +134,9 @@ button.ss-card.pickable:hover:not(:disabled), .ss-card.lifted { transform: trans
   min-height: 0;
   padding: 10px 12px 12px;
   box-sizing: border-box;
-  background: var(--backdrop) center bottom / var(--bs, cover) no-repeat, #1c2d4a;
+  /* 沙滩图上盖一层淡淡的罩色，牌更突出（白天版由调色表自动换成白色的罩） */
+  --veil: rgba(12, 17, 32, 0.22);
+  background: linear-gradient(var(--veil), var(--veil)), var(--backdrop) center bottom / var(--bs, cover) no-repeat, #1c2d4a;
   image-rendering: pixelated;
   overflow: hidden;
 }
@@ -263,6 +266,11 @@ button.ss-opp.pickable:hover { filter: brightness(1.15); }
 .app-shell .ss-take { justify-content: flex-start; }
 .ss-declare { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .app-shell .ss-declare button { flex-direction: column; gap: 4px; padding: 6px 4px; }
+.ss-declare button > span { display: flex; align-items: center; gap: 6px; }
+.ss-declare img, .ss-banner b img { width: 32px; height: 32px; }
+.ss-banner b { display: flex; align-items: center; gap: 12px; }
+.ss-call-chip { display: inline-flex; align-items: center; gap: 4px; }
+.ss-call-chip img { width: 16px; height: 16px; margin-left: -4px; }
 .app-shell .ss-declare .ss-stop { --rim: #9fe8b0; --shade: #0b2614; color: #e8ffe8; background: #1d6e3d; }
 .app-shell .ss-declare .ss-last { --rim: #ffb38a; --shade: #4a1406; color: #fff0e6; background: #b8401c; }
 .app-shell .ss-declare .ss-stop:hover:not(:disabled) { color: #e8ffe8; background: #238049; }
@@ -367,11 +375,12 @@ button.ss-opp.pickable:hover { filter: brightness(1.15); }
 .ss-summary h2 { margin: 0; color: var(--gold); font-family: inherit; font-size: 24px; font-weight: 400; }
 .app-shell .ss-summary .quiet-button { margin: 0; }
 .ss-summary ol { display: flex; flex: 1; flex-direction: column; gap: 8px; min-height: 0; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
-.ss-summary li { display: grid; grid-template-columns: minmax(180px, 0.9fr) minmax(0, 2fr) 170px 150px; align-items: center; gap: 12px; padding: 6px 10px; background: var(--panel-2); box-shadow: 0 0 0 var(--px) var(--edge); }
+.ss-summary li { display: grid; grid-template-columns: minmax(220px, 0.9fr) minmax(0, 2fr) 170px 150px; align-items: center; gap: 12px; padding: 6px 10px; background: var(--panel-2); box-shadow: 0 0 0 var(--px) var(--edge); }
 .ss-summary li.mine { box-shadow: 0 0 0 var(--px) var(--edge), inset 0 0 0 var(--px) var(--gold); }
 .ss-sum-who { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .ss-sum-who strong { color: var(--text); font-size: 24px; font-weight: 400; }
-.ss-sum-who small { flex-basis: 100%; color: var(--muted); font-size: 12px; }
+.ss-sum-who small { display: flex; flex-basis: 100%; flex-direction: column; color: var(--muted); font-size: 12px; }
+.ss-sum-who small span { white-space: nowrap; }
 .ss-sum-cards { display: flex; min-width: 0; flex-wrap: wrap; gap: 2px; }
 .ss-sum-cards .ss-card.mini { --mw: 32px; }
 .ss-sum-gap { width: 8px; }
@@ -551,7 +560,7 @@ button.ss-opp.pickable:hover { filter: brightness(1.15); }
 .ss-screen.mobile .ss-action { order: -1; }
 .ss-screen.mobile .ss-table { display: flex; flex-direction: column; overflow: visible; }
 .ss-screen.mobile .ss-me { order: -2; }
-.ss-screen.mobile .ss-center { order: -1; gap: 10px; }
+.ss-screen.mobile .ss-center { order: -1; flex-wrap: wrap; gap: 10px; }
 .ss-screen.mobile .ss-action { gap: 8px; }
 .ss-screen.mobile .ss-pair-buttons { grid-template-columns: 1fr 1fr; }
 .app-shell .ss-screen.mobile .ss-pair-button { min-height: 44px; gap: 6px; padding: 4px 6px; }

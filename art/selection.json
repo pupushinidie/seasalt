@@ -15,5 +15,12 @@
   "avatar-0": "out/r1/avatar/avatar-3.png",
   "avatar-1": "out/r1/avatar/avatar-26.png",
   "avatar-2": "out/r1/avatar/avatar-2.png",
-  "avatar-3": "out/r1/avatar/avatar-13.png"
+  "avatar-3": "out/r1/avatar/avatar-13.png",
+  "emblem": "out/r1/emblem/emblem-56.png",
+  "beach-day": "out/r1/beach-day-s32.png",
+  "beach-night": "out/r1/beach-night-s41.png",
+  "hero": "out/r1/hero-s52.png",
+  "card-mermaid": "out/r1/mermaid2/mermaid2-1.png",
+  "icon-stop": "out/r1/icon-stop/icon-stop.png",
+  "icon-last": "out/r1/icon-last/icon-last-3.png"
 }

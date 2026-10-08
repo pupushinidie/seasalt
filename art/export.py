@@ -2,7 +2,9 @@
 
 - card-<种类>：牌面小图。裁掉空白、加白描边（2 像素白 + 1 像素深色细边），放进 72×72 画布 → card-<种类>.png（大牌按 1 倍显示）；
   再缩一半（每 2×2 取多数色，保住描边）加 1 像素白边 + 1 像素深色边，放进 36×36 → card-<种类>-sm.png（小牌用）。
-- 其他（牌桌、首页主图、头像、徽记）：原样复制。
+- fx-<名字>：对子效果的小动画。值是帧文件名的前缀（out/fx/fx-crab/fx-crab-s31），每帧按大图的办法加白描边，
+  横排成一条 fx-<名字>.png（每帧 72px）。所有帧按同一个外框对齐，帧之间不会跳。
+- 其他（牌桌、首页主图、头像、徽记、图标）：原样复制。
 """
 from __future__ import annotations
 
@@ -60,12 +62,33 @@ def card_art(source: pathlib.Path, name: str) -> None:
     small.save(TARGET / f"{name}-sm.png")
 
 
+def fx_strip(prefix: pathlib.Path, name: str) -> None:
+    frames = [Image.open(path).convert("RGBA") for path in sorted(prefix.parent.glob(prefix.name + "-[0-9][0-9].png"))]
+    if not frames:
+        raise FileNotFoundError(prefix)
+    # 所有帧共用一个外框（并集），裁出来后放进 72×72，帧之间位置不跳
+    box = None
+    for frame in frames:
+        b = frame.getchannel("A").point(lambda a: 255 if a > 40 else 0).getbbox()
+        if b:
+            box = b if box is None else (min(box[0], b[0]), min(box[1], b[1]), max(box[2], b[2]), max(box[3], b[3]))
+    strip = Image.new("RGBA", (72 * len(frames), 72), (0, 0, 0, 0))
+    for index, frame in enumerate(frames):
+        sprite = frame.crop(box) if box else frame
+        strip.alpha_composite(sticker.outline(place(sprite, 72), white=2, dark=1), (index * 72, 0))
+    strip.save(TARGET / f"{name}.png")
+
+
 if __name__ == "__main__":
     TARGET.mkdir(parents=True, exist_ok=True)
     for name, source in json.loads((ART / "selection.json").read_text()).items():
         if name.startswith("_"):
             continue
         path = ART / source
+        if name.startswith("fx-"):
+            fx_strip(path, name)
+            print(name, "←", source, "（帧条）")
+            continue
         if not path.exists():
             print(name, "缺图：", source)
             continue
