@@ -37,7 +37,7 @@ export {
 export type { CreateOptions, NewPlayer } from "./engine.js";
 export { createRng } from "./rng.js";
 export type { Rng } from "./rng.js";
-export { CAPACITY_OPTIONS } from "./roomTypes.js";
+export { CAPACITY_OPTIONS, DEFAULT_ROOM_SETTINGS } from "./roomTypes.js";
 export type {
   AckResponse,
   Capacity,
@@ -50,7 +50,9 @@ export type {
   PublicRoomSummary,
   RematchState,
   RoomChatMessage,
+  RoomSettings,
   SendRoomChatPayload,
+  Spectator,
   ServerToClientEvents,
   VoiceParticipant,
   VoiceSignal,

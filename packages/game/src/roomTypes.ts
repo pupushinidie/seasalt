@@ -13,11 +13,31 @@ export interface LobbyMember {
 	readonly connected: boolean;
 }
 
+/** 房主在房间里随时可以改的设置。 */
+export interface RoomSettings {
+	/** 允许观战：有房间码、或者从首页列表都能进来看。 */
+	readonly allowSpectators: boolean;
+	/** 观战的人能看到所有人的手牌（上帝视角）；关掉时只看公开信息。牌堆顺序始终看不到。 */
+	readonly spectatorsSeeAll: boolean;
+	/** 公开房间：不认识的人也能从首页列表直接加入空座位。 */
+	readonly open: boolean;
+}
+
+export const DEFAULT_ROOM_SETTINGS: RoomSettings = { allowSpectators: true, spectatorsSeeAll: false, open: false };
+
+/** 观战的人：不占座位，不能操作、投票或进语音，可以聊天。 */
+export interface Spectator {
+	readonly id: string;
+	readonly name: string;
+}
+
 export interface LobbyRoomSnapshot {
 	readonly code: string;
 	readonly capacity: Capacity;
 	readonly status: "waiting" | "playing";
 	readonly members: LobbyMember[];
+	readonly spectators: Spectator[];
+	readonly settings: RoomSettings;
 	readonly chat: RoomChatMessage[];
 	readonly game?: GameState;
 	/** 当前这一步剩余的毫秒数（发送时）；超时自动处理，见 timeoutTurn。 */
@@ -56,6 +76,8 @@ export interface RoomChatMessage {
 	readonly name: string;
 	readonly message: string;
 	readonly createdAt: string;
+	/** 观战的人发的。 */
+	readonly spectator?: boolean;
 }
 
 export interface SendRoomChatPayload {
@@ -67,9 +89,12 @@ export interface CreateRoomPayload {
 	readonly capacity: Capacity;
 }
 
+/** 用房间码加入，或者从首页列表按房间的公开 id 加入；spectate 为 true 时进来观战。 */
 export interface JoinRoomPayload {
 	readonly name: string;
-	readonly code: string;
+	readonly code?: string;
+	readonly roomId?: string;
+	readonly spectate?: boolean;
 }
 
 /** 初始界面公开展示的房间概况；不含房间码和聊天内容。 */
@@ -77,6 +102,9 @@ export interface PublicRoomSummary {
 	readonly id: string;
 	readonly status: "waiting" | "playing" | "finished";
 	readonly capacity: Capacity;
+	readonly open: boolean;
+	readonly allowSpectators: boolean;
+	readonly spectators: number;
 	readonly round?: number;
 	readonly players: {
 		readonly name: string;
@@ -101,6 +129,10 @@ export interface ClientToServerEvents {
 	"lobby:get": (ack: RoomAck<PublicRoomSummary[]>) => void;
 	"room:rematch": (accept: boolean, ack: RoomAck<void>) => void;
 	"room:kick": (memberId: string, ack: RoomAck<void>) => void;
+	"room:settings": (settings: Partial<RoomSettings>, ack: RoomAck<void>) => void;
+	/** 等待中：观战的人坐到空座位上 / 玩家（房主除外）改成观战。 */
+	"room:sit": (ack: RoomAck<void>) => void;
+	"room:stand": (ack: RoomAck<void>) => void;
 	"room:dissolve": (ack: RoomAck<void>) => void;
 	"admin:verify": (token: string, ack: RoomAck<void>) => void;
 	"admin:dissolve": (payload: { roomId: string; token: string }, ack: RoomAck<void>) => void;
