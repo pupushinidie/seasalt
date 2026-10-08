@@ -1006,7 +1006,11 @@ function FinalDialog({ game, room, myId, onRematch }: { game: GameState; room: L
   return (
     <div className="gm-modal-backdrop" role="presentation">
       <section className="gm-panel ss-final" role="dialog" aria-modal="true" aria-labelledby="ss-final-title">
-        <img className="ss-final-icon" src={art.card(result.mermaids ? "mermaid" : "lighthouse")} alt="" />
+        {result.mermaids ? (
+          <span className="ss-final-icon ss-fx loop" style={{ backgroundImage: `url(${art.fx("mermaid")})`, "--frames": FX_FRAMES } as CSSProperties} />
+        ) : (
+          <img className="ss-final-icon" src={art.card("lighthouse")} alt="" />
+        )}
         <h2 id="ss-final-title">{title}</h2>
         <p className="ss-muted">
           {result.mermaids

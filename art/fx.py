@@ -26,6 +26,8 @@ FX: dict[str, tuple[str, str, int]] = {
     "fx-fish": ("card-fish", "the fish wiggles its tail and fins, swimming in place", 33),
     "fx-shark": ("card-shark", "the shark opens its mouth wide and snaps it shut, biting twice", 34),
     "fx-mermaid": ("card-mermaid", "the mermaid waves her hand and her tail sways", 35),
+    # 第一版船几乎不动（只有首帧不同，循环时会闪），换种子重做
+    "fx-boat2": ("card-boat", "the sailboat bobs up and down on the waves, the little waves roll", 36),
 }
 
 

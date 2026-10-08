@@ -322,6 +322,7 @@ button.ss-opp.pickable:hover { filter: brightness(1.15); }
 .ss-toast b { font-size: 24px; font-weight: 400; white-space: nowrap; }
 .ss-fx { display: block; flex: 0 0 72px; width: 72px; height: 72px; margin: -20px 0 -12px; background-repeat: no-repeat; background-size: calc(var(--frames) * 100%) 100%; image-rendering: pixelated; animation: ss-fx 0.8s steps(var(--frames), jump-none) 2; }
 @keyframes ss-fx { from { background-position: 0 0; } to { background-position: 100% 0; } }
+.ss-fx.loop { margin: 0 auto 6px; animation: ss-fx 1.2s steps(var(--frames), jump-none) infinite; }
 @keyframes ss-toast {
   0% { opacity: 0; transform: translateY(calc(var(--px) * 6)); }
   9% { opacity: 1; transform: none; }

@@ -13,7 +13,7 @@ import pathlib
 import shutil
 from collections import Counter
 
-from PIL import Image
+from PIL import Image, ImageChops
 
 import sticker
 
@@ -66,6 +66,9 @@ def fx_strip(prefix: pathlib.Path, name: str) -> None:
     frames = [Image.open(path).convert("RGBA") for path in sorted(prefix.parent.glob(prefix.name + "-[0-9][0-9].png"))]
     if not frames:
         raise FileNotFoundError(prefix)
+    # 末帧就是首帧（生成时首末帧用的同一张）：去掉，循环时不会重复一帧
+    if len(frames) > 2 and ImageChops.difference(frames[0], frames[-1]).getbbox() is None:
+        frames = frames[:-1]
     # 所有帧共用一个外框（并集），裁出来后放进 72×72，帧之间位置不跳
     box = None
     for frame in frames:

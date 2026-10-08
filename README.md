@@ -51,7 +51,7 @@ npm run build:game && node scripts/test-bot.mjs host 机器人 3 --start-at=3   
 - `apps/server`：Socket.IO 房间、计时、重连、语音信令（和其他游戏同一套），离线玩家 3 秒代打。
 - `apps/web`：React 网页。`GameBoard.tsx` 是牌桌（`pickSizes` 按牌桌高度算牌的大小：手牌最大 128px、张数多时缩到 80px 再叠放；中间牌堆按剩下的高度放大，≥ 168px 时小图按 2 倍显示）；`cards.tsx` 画牌（牌的颜色是 CSS，小图是 PixelLab 画的、`art/export.py` 加的白描边）。
 - `scripts/test-bot.mjs`：陪玩机器人（直接用规则包的 `legalActions` / `cardPoints`）。
-- `art/`：`art.py` 出候选（14 种牌的小图、头像、徽记、沙滩、首页主图），`overview.py` / `sticker.py` 拼候选总览（贴在牌色上看效果），`selection.json` 记选中的，`export.py` 导出到 `apps/web/public/art/`，花费记在 `ledger.jsonl`。
+- `art/`：`art.py` 出候选（14 种牌的小图、头像、徽记、STOP / 最后机会图标、沙滩、首页主图），`fx.py` 出对子效果的小动画（首末帧都用选定的小图，`fxcheck.py` 量逐帧变化、拼帧条检查），`overview.py` / `sticker.py` 拼候选总览（贴在牌色上看效果），`selection.json` 记选中的，`export.py` 导出到 `apps/web/public/art/`（牌面加白描边、动画拼成横排帧条），花费记在 `ledger.jsonl`。`gallery_r1.py` 生成给他挑图的本地画廊（`python -m http.server 8767 --directory art/out/gallery`）。
 
 ## 画面：白天版和夜间版
 

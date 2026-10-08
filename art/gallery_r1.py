@@ -80,7 +80,7 @@ def build() -> dict:
         "title": "海盐与纸 · 第一轮：牌面和场景",
         "updated": time.strftime("%m-%d %H:%M"),
         "spent": pixellab.spent_usd(),
-        "intro": ("游戏已经能玩了（上面是本地真实牌局的截图），美术先用我挑的。卡面按你说的：整张是牌的颜色，中间一只白描边的像素小图，字很少。\n"
+        "intro": ("游戏已经能玩了（上面是牌局截图和几段小动画：打出对子、被偷、四美人鱼获胜时在玩家面板上弹一下），美术先用我挑的。卡面按你说的：整张是牌的颜色，中间一只白描边的像素小图，字很少。\n"
                   "每项点「选这张」，或者「都不满意，重画」并写备注。最后把页面底部那段文字复制给我。"),
         "preview": [],
         "items": items,
@@ -97,6 +97,9 @@ if __name__ == "__main__":
             (shots / "table-day.png", "牌桌 · 白天版"),
             (shots / "home.png", "首页"),
         ] if p.exists()]
+        fx = OUT / "fx"
+        labels = {"crab": "打出两只蟹", "boat": "打出两艘船（第一版几乎不动，重做过）", "fish": "打出两条鱼", "shark": "鲨鱼 + 泳者 / 被偷", "mermaid": "四美人鱼获胜"}
+        data["preview"] += [{"src": f"fx/{name}.gif", "caption": f"小动画：{label}"} for name, label in labels.items() if (fx / f"{name}.gif").exists()]
     extra = json.loads((OUT / "extra-items.json").read_text()) if (OUT / "extra-items.json").exists() else []
     data["items"] += extra
     (OUT / "gallery.json").write_text(json.dumps(data, ensure_ascii=False, indent=1))

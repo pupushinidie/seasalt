@@ -22,5 +22,10 @@
   "hero": "out/r1/hero-s52.png",
   "card-mermaid": "out/r1/mermaid2/mermaid2-1.png",
   "icon-stop": "out/r1/icon-stop/icon-stop.png",
-  "icon-last": "out/r1/icon-last/icon-last-3.png"
+  "icon-last": "out/r1/icon-last/icon-last-3.png",
+  "fx-crab": "out/fx/fx-crab/fx-crab-s31",
+  "fx-fish": "out/fx/fx-fish/fx-fish-s33",
+  "fx-shark": "out/fx/fx-shark/fx-shark-s34",
+  "fx-boat": "out/fx/fx-boat2/fx-boat2-s36",
+  "fx-mermaid": "out/fx/fx-mermaid/fx-mermaid-s35"
 }
