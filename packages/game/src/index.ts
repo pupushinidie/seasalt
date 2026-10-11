@@ -57,3 +57,5 @@ export type {
   VoiceParticipant,
   VoiceSignal,
 } from "./roomTypes.js";
+export { botAdvice, botCommand, DEFAULT_BOT_PARAMS } from "./bot.js";
+export type { BotAdvice, BotParams } from "./bot.js";

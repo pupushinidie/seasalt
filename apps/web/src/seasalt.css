@@ -173,6 +173,8 @@ button.ss-opp.pickable:hover { filter: brightness(1.15); }
 .ss-tag { --rim: #3d5482; --shade: #080c17; padding: 0 4px; color: var(--muted); background: var(--panel-2); font-size: 12px; font-style: normal; line-height: 16px; }
 .ss-tag.turn { --rim: var(--gold-2); --shade: #2a1c06; color: var(--gold); background: #3a2c10; }
 .ss-tag.call { --rim: #ffd27a; --shade: #6e3a06; color: #2a1c06; background: var(--gold); }
+.ss-tag.bot { --rim: #8ec0ff; --shade: #0e2550; color: #d8e8ff; background: #2a62c0; }
+.ss-tag.auto { --rim: var(--gold-2); --shade: #2a1c06; color: var(--gold); background: #3a2c10; }
 .ss-tag.off { --rim: #f25c5c; --shade: #3d0a12; color: #ffd8d0; background: #6e1020; }
 .ss-opp-hand { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; }
 .ss-opp-hand b { color: var(--text); font-size: 24px; font-weight: 400; }
