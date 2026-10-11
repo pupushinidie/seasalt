@@ -86,6 +86,30 @@ pm2 按仓库根目录的 `ecosystem.config.cjs` 直接启动一个 `node --impo
 
 ## 背景音乐
 
-进了房间（等候房间、对局、观战）和新手教程里循环放 `apps/web/public/bgm/seasalt.mp3`，首页和房间列表不放。曲子是他用 Suno 做的，原文件在桌面 `bgm v1/海盐与纸.mp3`（2026-10-11 接入）。播放器是 `apps/web/src/bgm.tsx`（大厅和各游戏是同一份文件，改了要同步到所有仓库）：一个页面只有一个播放器，从等候房间进牌桌不会从头放；循环处交叉淡化；切到别的标签页时暂停。顶栏的 ♪ 按钮能开关、调音量，设置全站共用（localStorage `gm-music`、`gm-music-volume`，默认开、音量 60）。浏览器要求先点过页面才能出声，从首页点进房间正好满足。
+进了房间（等候房间、对局、观战）和新手教程里循环放 `apps/web/public/bgm/seasalt.mp3`，首页和房间列表不放。曲子是他用 Suno 做的，原文件在桌面 `bgm v1/海盐与纸.mp3`（2026-10-11 接入）。播放器是 `apps/web/src/gm-sound.tsx`（大厅和各游戏是同一份文件，改了要同步到所有仓库）：一个页面只有一个播放器，从等候房间进牌桌不会从头放；循环处交叉淡化；切到别的标签页时暂停。顶栏的 ♪ 按钮能开关、调音量，设置全站共用（localStorage `gm-music`、`gm-music-volume`，默认开、音量 60）。浏览器要求先点过页面才能出声，从首页点进房间正好满足。
 
 换曲子：把新文件放进 `apps/web/public/bgm/`，用 `~/miniconda3/envs/quant/bin/python -I ~/projects/qa-reports/tools/bgm-analyze.py <文件>` 量出 gain / start / end，改 `App.tsx` 里的 `BGM`。本地检查：`URL=http://localhost:<网页端口>/ node ~/projects/qa-reports/tools/bgm-check.mjs`（进房间、开局、离开、开关、顶栏是否被挤成两行）。
+
+### 动作音效
+
+音效全部用 Web Audio 即时合成（共用库 `gm-sound.tsx` 的 `sfx.*`，各仓库同一份，不要单独改）；这款游戏的对局音效在 `apps/web/src/game-sfx.ts`：每次对局 version 变了，按这一步的 `game.events` 挨个配声音、错开几十到几百毫秒。自己的动作响亮，别人的（和观战时听到的）减半；第一次拿到对局、断线回来跳了好几步时不补放。
+
+| 动作 / 事件 | 声音 |
+|---|---|
+| 摸两张（DrewDeck）、拿弃牌堆顶（TookDiscard）、蟹挑牌 / 鱼摸牌（CrabTook / FishDrew） | 摸牌 `draw` |
+| 留一张、另一张丢进弃牌堆（Kept） | 出牌 `card`；两堆都能丢时先点牌只是选中：`select` |
+| 打出对子（PlayedPair） | `card` ×2 + 招牌：两只蟹「咔嚓」蟹钳、两艘船「叮——叮」船钟、两条鱼溅水和气泡、鲨鱼 + 泳者低沉的「嗖」 |
+| 翻看弃牌堆（CrabPile） | 翻牌 `flip` |
+| 偷牌（Stole） | `hit` + `draw`（偷的人或被偷的人是自己就响亮） |
+| 效果用不了（EffectSkipped）、牌堆摸空这轮作废 | `pass` |
+| 宣告 STOP / 最后机会（Announced） | 招牌汽笛：STOP 两声短的，最后机会一声长的再往上挑 |
+| 最后一回合打完亮牌（Revealed） | `reveal` |
+| 一轮结算（RoundEnded） | 自己得分 `score`（≥7 分是大的）；自己喊最后机会赌赢 `sparkle`、赌输 `bust` |
+| 新一轮（RoundStarted） | 招牌海浪 + 洗牌 + 两个弃牌堆翻开（第 2 轮起先响 `roundStart`） |
+| 集齐 4 张美人鱼（MermaidWin） | 招牌竖琴刮奏 |
+| 终局（GameEnded） | `gameOver` 赢 / 输；观战的人听 `score` |
+| 轮到你 / 自己的回合交出 | `yourTurn` / `turnPassed`；最后 5 秒每秒 `countdown`，自己超时 `timeout` |
+| 别人在结算画面点「下一轮」 | 很轻的一声 |
+| 点了不能点的（轮到自己时点不能打的手牌、不能拿的弃牌堆、不能偷的对手） | `deny` |
+
+开发时响过的音效名字记在 `window.__sfxLog`。自测脚本 `~/projects/qa-reports/tools/seasalt-sfx.mjs`（服务端用 `TURN_MS=10000 BOT_DELAY_SCALE=0.5 npm run dev` 起，才等得到超时）：自己把每种动作做一遍，确认每次都有新的声音。

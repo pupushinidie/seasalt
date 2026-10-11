@@ -78,6 +78,8 @@ interface CardViewProps {
   readonly badge?: ReactNode | undefined;
   /** 新手教程高亮用的 data-tutorial。 */
   readonly tut?: string | undefined;
+  /** 按下时的音效（data-sfx），比如只是选中、还没发出去的牌用 "select"。 */
+  readonly sfx?: string | undefined;
 }
 
 /**
@@ -85,7 +87,7 @@ interface CardViewProps {
  * 尺寸由外层 CSS 变量决定：--cw 牌宽。小图有两张：72px 的大图（大牌）和 36px 的小图（mini 小牌、或者外层加了
  * small-cards 时的大牌），都按 1 倍显示，由 CSS 决定显示哪张。
  */
-export function CardView({ card, className = "", style, title, onClick, onMouseEnter, onMouseLeave, disabled, badge, tut }: CardViewProps) {
+export function CardView({ card, className = "", style, title, onClick, onMouseEnter, onMouseLeave, disabled, badge, tut, sfx }: CardViewProps) {
   const label = cardLabel(card);
   const body = (
     <>
@@ -101,7 +103,7 @@ export function CardView({ card, className = "", style, title, onClick, onMouseE
   const tip = title ?? `${label}　${CARD_HELP[card.type]}`;
   if (onClick) {
     return (
-      <button type="button" className={classes} style={merged} title={tip} aria-label={label} onClick={onClick} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} disabled={disabled} data-tutorial={tut}>
+      <button type="button" className={classes} style={merged} title={tip} aria-label={label} onClick={onClick} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} disabled={disabled} data-tutorial={tut} data-sfx={sfx}>
         {body}
       </button>
     );

@@ -22,6 +22,8 @@ import { art, CARD_COLORS, coverSize, FX_FRAMES, seatColor } from "./art.js";
 import { CARD_NAMES, CardBack, CardView, cardLabel, colorStyle } from "./cards.js";
 import GameRules from "./GameRules.js";
 import { GameRoomMenu, SpectateBar } from "./RoomExtras.js";
+import { useSfxCountdown } from "./gm-sound.js";
+import { uiSfx, useGameSfx } from "./game-sfx.js";
 import { socket } from "./socket.js";
 import { Coach, TipToast } from "./tutorial/Coach.js";
 import { useFirstTimeTips } from "./tutorial/tips.js";
@@ -414,6 +416,9 @@ function GameBoard({
   const myMove = !spectating && !autoPlaying && playing && game.actor === myIndex && myIndex !== -1;
   const stage = game.stage;
   const secondsLeft = useCountdown(room);
+  // 动作音效（见 game-sfx.ts）：自己的响亮、别人的减半；观战都算别人的。最后 5 秒每秒一声。
+  useGameSfx(game, selfId);
+  useSfxCountdown(myMove, secondsLeft);
   const nameOf = (playerId: string) => (playerId === selfId ? "你" : game.players.find((player) => player.id === playerId)?.name ?? "?");
   // 「提示」：只有自己和人机时（教程后的练习局，或一个人加人机开的房间）才有
   const botsOnly = room.members.every((candidate) => candidate.id === member?.id || candidate.bot);
@@ -664,7 +669,11 @@ function GameBoard({
     const badge = canTake && top ? gainBadge(gainOf(me, top)) : canCrab ? "看这一堆" : canDump ? "丢这里" : null;
     const highlight = (myMove && stage === "keep" && keepPick === null && pileOptions.length === 1 && pileOptions[0] === pile) || (myMove && stage === "crabPick" && game.crabPile === pile);
     return (
-      <div className={["ss-pile", fresh.piles.has(pile) ? "fresh" : "", highlight ? "marked" : ""].join(" ")} key={pile}>
+      <div
+        className={["ss-pile", fresh.piles.has(pile) ? "fresh" : "", highlight ? "marked" : ""].join(" ")}
+        key={pile}
+        onPointerDown={!onClick && myMove && (stage === "draw" || stage === "keep" || stage === "crabPile") ? () => uiSfx.deny() : undefined}
+      >
         {top ? (
           <CardView
             card={top}
@@ -704,7 +713,11 @@ function GameBoard({
 
       <div className="ss-layout">
         <div className={["ss-table", sizes.pw < 92 ? "small-cards" : "", sizes.pw >= 168 ? "double-art" : ""].join(" ")} ref={tableRef} style={tableStyle}>
-          <div className={`ss-opps n${opponents.length}`}>
+          <div
+            className={`ss-opps n${opponents.length}`}
+            // 要偷牌时点了不能偷的对手（手牌亮出了 / 没牌）：「不行」
+            onPointerDown={(event) => { if (myMove && stage === "steal" && (event.target as Element).closest("section.ss-opp")) uiSfx.deny(); }}
+          >
             {opponents.map((index) => (
               <OpponentPanel
                 key={game.players[index]!.id}
@@ -749,6 +762,7 @@ function GameBoard({
                       card={card}
                       className={["pickable", "fresh", keepPick === card.id ? "chosen" : ""].join(" ")}
                       onClick={() => keep(card)}
+                      sfx={pileOptions.length > 1 ? "select" : undefined}
                       disabled={busy}
                       badge={keepPick === card.id ? "留这张" : gainBadge(gainOf(me, card))}
                       tut={`drawn:${card.id}`}
@@ -820,7 +834,11 @@ function GameBoard({
               <div className="ss-me-played">
                 {me.played.length > 0 ? <PlayedPairs pairs={me.played} fresh={fresh} /> : <span className="ss-muted">打出的对子摆在这里</span>}
               </div>
-              <div className={handCard < 92 ? "ss-hand small-cards" : "ss-hand normal-cards"} data-tutorial="hand" style={{ "--step": `${handStep}px`, "--cw": `${handCard}px` } as CSSProperties}>
+              <div
+                className={handCard < 92 ? "ss-hand small-cards" : "ss-hand normal-cards"}
+                // 轮到自己时点了手里不能打的牌：「不行」的一声（能打的是按钮，按下自己会响）
+                onPointerDown={(event) => { if (myMove && (event.target as Element).closest("span.ss-card")) uiSfx.deny(); }}
+                data-tutorial="hand" style={{ "--step": `${handStep}px`, "--cw": `${handCard}px` } as CSSProperties}>
                 {hand.length === 0 && (spectating && me.handCount > 0
                   ? Array.from({ length: me.handCount }, (_, k) => <CardBack key={k} />)
                   : <span className="ss-muted">手里还没有牌</span>)}

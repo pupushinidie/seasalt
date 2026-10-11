@@ -10,7 +10,7 @@ import RoomChat from "./RoomChat.js";
 import { roomRole, RoomSettingsPanel, SeatSwitch } from "./RoomExtras.js";
 import { socket } from "./socket.js";
 import { ThemeToggle, useTheme } from "./theme.js";
-import { SoundToggle, useBgm, type BgmTrack } from "./gm-sound.js";
+import { sfx, SoundToggle, useBgm, useRoomSfx, type BgmTrack } from "./gm-sound.js";
 import { useVoice } from "./voice.js";
 import { TutorialInvite } from "./tutorial/Invite.js";
 import { readTutorial } from "./tutorial/storage.js";
@@ -63,6 +63,13 @@ function App() {
   // 新手教程：首页或等候房间点进来（地址带 ?tutorial 时直接打开，游戏中心可以直接链过来）
   const [tutorialOpen, setTutorialOpen] = useState(() => new URLSearchParams(window.location.search).has("tutorial"));
   useBgm(room || tutorialOpen ? BGM : null);
+  // 房间里的提示音：有人进出、开局、收到别人的聊天（对局里的动作音效在 game-sfx.ts）
+  useRoomSfx(room ? {
+    members: room.members.length,
+    playing: room.status === "playing",
+    chatCount: room.chat.length,
+    lastChatMine: room.chat.at(-1)?.senderId === socket.id,
+  } : null);
 
   function closeTutorial() {
     setTutorialOpen(false);
@@ -106,7 +113,10 @@ function App() {
     };
     const handleDisconnect = () => setConnected(false);
     const handleRoomUpdate = (snapshot: LobbyRoomSnapshot) => setRoom(snapshot);
-    const handleRoomError = (message: string) => setError(message);
+    const handleRoomError = (message: string) => {
+      sfx.error();
+      setError(message);
+    };
     const handleLobbyUpdate = (rooms: PublicRoomSummary[]) => setLobbyRooms(rooms);
     const handleRoomClosed = ({ reason }: { reason: string }) => {
       setRoom(null);
@@ -154,6 +164,7 @@ function App() {
     socket.emit("room:join", { name: nickname, roomId, spectate }, (response) => {
       setBusy(false);
       if (!response.ok) {
+        sfx.error();
         setError(response.error);
         return;
       }
@@ -172,6 +183,7 @@ function App() {
     const complete = (response: { ok: true; data: LobbyRoomSnapshot } | { ok: false; error: string }) => {
       setBusy(false);
       if (!response.ok) {
+        sfx.error();
         setError(response.error);
         return;
       }
@@ -194,6 +206,7 @@ function App() {
     socket.emit("room:start", (response) => {
       setBusy(false);
       if (!response.ok) {
+        sfx.error();
         setError(response.error);
         return;
       }
@@ -207,6 +220,7 @@ function App() {
     socket.emit("room:leave", (response) => {
       setBusy(false);
       if (!response.ok) {
+        sfx.error();
         setError(response.error);
         return;
       }
@@ -223,6 +237,7 @@ function App() {
     socket.emit("game:command", command, (response) => {
       setBusy(false);
       if (!response.ok) {
+        sfx.error();
         setError(response.error);
         return;
       }
@@ -234,7 +249,7 @@ function App() {
   function roomCommand(send: (ack: (response: { ok: true; data: void } | { ok: false; error: string }) => void) => void) {
     setError("");
     send((response) => {
-      if (!response.ok) setError(response.error);
+      if (!response.ok) { sfx.error(); setError(response.error); }
     });
   }
 
