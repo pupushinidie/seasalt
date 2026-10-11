@@ -11,6 +11,10 @@ import { roomRole, RoomSettingsPanel, SeatSwitch } from "./RoomExtras.js";
 import { socket } from "./socket.js";
 import { ThemeToggle, useTheme } from "./theme.js";
 import { useVoice } from "./voice.js";
+import { TutorialInvite } from "./tutorial/Invite.js";
+import { readTutorial } from "./tutorial/storage.js";
+import { GAME_ID } from "./tutorialGame.js";
+import TutorialMode from "./TutorialMode.js";
 
 type EntryMode = "create" | "join";
 
@@ -51,6 +55,27 @@ function App() {
   // 观战时从谁的座位看（默认第一位玩家）。
   const [watchId, setWatchId] = useState("");
   const voice = useVoice(room);
+
+  // 新手教程：首页或等候房间点进来（地址带 ?tutorial 时直接打开，游戏中心可以直接链过来）
+  const [tutorialOpen, setTutorialOpen] = useState(() => new URLSearchParams(window.location.search).has("tutorial"));
+
+  function closeTutorial() {
+    setTutorialOpen(false);
+    const params = new URLSearchParams(window.location.search);
+    if (params.has("tutorial")) {
+      params.delete("tutorial");
+      const query = params.toString();
+      window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
+    }
+  }
+
+  // 在等候房间里看教程时，房主一开局就回到牌桌（不然这一步会超时、转成托管）
+  useEffect(() => {
+    if (tutorialOpen && room?.status === "playing") {
+      closeTutorial();
+      setNotice("对局开始了，教程先停在这里。");
+    }
+  }, [tutorialOpen, room?.status]);
 
   // 「房间已创建」「房间码已复制」这类临时提示 4 秒后自动消失，不一直挂在页面上。
   useEffect(() => {
@@ -231,6 +256,15 @@ function App() {
     }
   }
 
+  if (tutorialOpen && room?.status !== "playing") {
+    return (
+      <main className="app-shell ss-game tut-on">
+        <TutorialMode name={name} brand={<Brand />} theme={theme} themeToggle={themeToggle} waitingRoom={room?.code} onExit={closeTutorial} />
+        {confirmDialog}
+      </main>
+    );
+  }
+
   if (room?.status === "playing" && room.game) {
     const players = room.game.players;
     const watched = players.some((player) => player.id === watchId) ? watchId : players[0]!.id;
@@ -282,6 +316,15 @@ function App() {
           onAddBot={addBot}
           onDissolve={dissolveRoom}
           chat={<RoomChat room={room} voice={voice} />}
+          tutorial={
+            <TutorialInvite
+              record={readTutorial(GAME_ID)}
+              title="等人的时候，先学一下？"
+              text="咕噜嘎带你在真牌桌上走一局，3 分钟。不会离开房间，房主一开局就自动回来。"
+              again="再看一遍新手教程（不会离开房间）"
+              onOpen={() => setTutorialOpen(true)}
+            />
+          }
         />
         {confirmDialog}
       </main>
@@ -308,6 +351,13 @@ function App() {
             在海边收集卡牌：每回合摸两张留一张，或者捡别人丢下的牌。凑对子打出来能换效果——蟹翻弃牌堆、船再来一回合、鱼多摸一张、鲨鱼配泳者偷对手一张。
             卡牌分到 7 就能喊停：稳稳地 STOP，或者赌一把「最后机会」。先到目标分的那一轮打完，总分最高的人获胜。
           </p>
+          <TutorialInvite
+            record={readTutorial(GAME_ID)}
+            title="第一次玩？3 分钟学会"
+            text="咕噜嘎在真牌桌上带你走一局，学完和人机练一局。"
+            again="再看一遍新手教程"
+            onOpen={() => setTutorialOpen(true)}
+          />
           <img className="ss-hero" src={art.hero} alt="" />
           <div className="ss-showcase" aria-hidden="true">
             {SHOWCASE.map((card) => <CardView key={`${card.type}-${card.color}`} card={card} />)}
@@ -462,6 +512,7 @@ function RoomView({
   onAddBot,
   onDissolve,
   chat,
+  tutorial,
 }: {
   room: LobbyRoomSnapshot;
   busy: boolean;
@@ -474,6 +525,8 @@ function RoomView({
   onAddBot: () => void;
   onDissolve: () => void;
   chat: ReactNode;
+  /** 「新手教程」入口卡（观战的人不显示）。 */
+  tutorial: ReactNode;
 }) {
   const { isHost, spectating } = roomRole(room);
   const openSeats = Math.max(0, room.capacity - room.members.length);
@@ -486,6 +539,7 @@ function RoomView({
           <h1>{spectating ? "你在观战。" : room.status === "waiting" ? "牌桌准备中。" : "好戏即将开始。"}</h1>
           <p>{spectating ? "等房主开始对局；有空座位时可以坐下一起玩。" : room.status === "waiting" ? "把房间码分享给朋友，等大家就位后开始。" : "对局马上开始。"}</p>
         </div>
+        {!spectating && room.status === "waiting" && <div className="ss-room-tut">{tutorial}</div>}
         <div className="room-heading-actions">
           {isHost && <button className="quiet-button danger" type="button" onClick={onDissolve} disabled={busy}>解散房间</button>}
           <button className="quiet-button" type="button" onClick={onLeave} disabled={busy || (room.status === "playing" && !spectating)}>

@@ -638,3 +638,26 @@ button.ss-opp.pickable:hover { filter: brightness(1.15); }
 .ss-room-cards b { color: var(--text); font-size: 12px; font-weight: 400; white-space: nowrap; }
 .ss-room-cards small { overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 @media (min-width: 760px) and (max-height: 820px) { .ss-room-cards .ss-card.mini { --mw: 36px; } .ss-room-cards ul { gap: 4px 10px; } }
+
+/* ---------- 新手教程和「提示」 ---------- */
+.app-shell .ss-hint { flex: none; width: auto; min-height: 0; margin: 0 0 0 auto; padding: 2px 8px; font-size: 12px; }
+.app-shell .ss-hint small { margin-left: 4px; color: var(--muted); font-size: 12px; }
+.app-shell .ss-hint.on { color: var(--gold); }
+.ss-log-title { margin: 0; color: var(--muted); font-family: inherit; font-size: 12px; font-weight: 400; }
+.tut-checklist h3 { margin-top: 0; color: var(--text); font-family: inherit; font-size: 12px; font-weight: 400; }
+.tut-checklist h3 small { margin-left: 6px; color: var(--muted); font-size: 12px; }
+.app-shell .ss-final-actions { justify-content: center; margin-top: 16px; }
+.app-shell .ss-final-actions :is(.primary-button, .quiet-button) { width: auto; margin: 0; }
+/* 等候房间：教程入口放在标题和「离开房间」中间 */
+.ss-room-tut { flex: 1; min-width: 0; max-width: 620px; align-self: center; }
+.ss-room-tut .tut-invite { margin: 0; padding: 8px 12px; }
+@media (max-width: 759px) {
+  .ss-room .room-heading { flex-wrap: wrap; }
+  .ss-room-tut { flex-basis: 100%; order: 3; max-width: none; }
+}
+/* 小贴士：宽屏放右栏下方（动作记录那里），别盖住对手的座位和分数 */
+@media (min-width: 1280px) {
+  .ss-screen .tut-toast { top: auto; bottom: 16px; right: 16px; left: auto; translate: none; transform: none; flex-wrap: wrap; width: 300px; }
+  .ss-screen .tut-toast p { flex: 1 1 180px; }
+  .ss-screen .tut-toast-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; width: 100%; }
+}

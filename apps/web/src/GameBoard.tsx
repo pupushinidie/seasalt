@@ -23,6 +23,9 @@ import { CARD_NAMES, CardBack, CardView, cardLabel, colorStyle } from "./cards.j
 import GameRules from "./GameRules.js";
 import { GameRoomMenu, SpectateBar } from "./RoomExtras.js";
 import { socket } from "./socket.js";
+import { Coach, TipToast } from "./tutorial/Coach.js";
+import { useFirstTimeTips } from "./tutorial/tips.js";
+import { detectTips, GAME_ID, hintFor, TIPS, type Hint } from "./tutorialGame.js";
 import type { Theme } from "./theme.js";
 
 interface GameBoardProps {
@@ -46,6 +49,18 @@ interface GameBoardProps {
   readonly onWatch: (playerId: string) => void;
   /** 观战的人离开。 */
   readonly onLeave: () => void;
+  /** 自己在 room.members 里的 id；默认 socket.id，新手教程里传固定值。 */
+  readonly selfMemberId?: string;
+  /**
+   * online：真实对局（默认；只有自己和人机时能看提示，第一次遇到的事出小贴士）；
+   * tutorial：新手教程的剧本进行中（咕噜嘎在讲，不出提示和小贴士）；
+   * practice：教程后的练习局（随时能看提示）。
+   */
+  readonly mode?: "online" | "tutorial" | "practice";
+  /** 结算框里替代「再来一局」的按钮（练习局放「结束教程」「再练一局」）。 */
+  readonly finalActions?: ReactNode;
+  /** 先不弹结算框（教程里先讲完再弹）。 */
+  readonly finalHidden?: boolean;
 }
 
 function useCountdown(room: LobbyRoomSnapshot): number | null {
@@ -354,9 +369,9 @@ function OpponentPanel({
   );
   const style = { "--seat": seatColor(player.color) } as CSSProperties;
   return stealable ? (
-    <button type="button" className={classes} style={style} onClick={onSteal}>{body}</button>
+    <button type="button" className={classes} style={style} onClick={onSteal} data-tutorial={`seat:${player.id}`}>{body}</button>
   ) : (
-    <section className={classes} style={style} aria-label={`${player.name}的牌`}>{body}</section>
+    <section className={classes} style={style} aria-label={`${player.name}的牌`} data-tutorial={`seat:${player.id}`}>{body}</section>
   );
 }
 
@@ -378,9 +393,12 @@ function previewText(me: Player | undefined, cards: readonly Card[]): string {
   return after === before ? `拿了还是 ${after} 分` : `拿了 ${before} → ${after} 分`;
 }
 
-function GameBoard({ room, busy, error, notice, brand, connection, theme, themeToggle, chat, onCommand, onRematch, onAuto, onDissolve, watchId, onWatch, onLeave }: GameBoardProps) {
+function GameBoard({
+  room, busy, error, notice, brand, connection, theme, themeToggle, chat, onCommand, onRematch, onAuto, onDissolve, watchId, onWatch, onLeave,
+  selfMemberId, mode = "online", finalActions, finalHidden = false,
+}: GameBoardProps) {
   const game = room.game!;
-  const member = room.members.find((candidate) => candidate.id === socket.id);
+  const member = room.members.find((candidate) => candidate.id === (selfMemberId ?? socket.id));
   // 观战的人没有座位：牌桌按 watchId 那位玩家的座位摆（me 就是他），但什么都不能点，也不叫「你」。
   const spectating = !member;
   const myId = member?.playerId ?? watchId;
@@ -397,6 +415,14 @@ function GameBoard({ room, busy, error, notice, brand, connection, theme, themeT
   const stage = game.stage;
   const secondsLeft = useCountdown(room);
   const nameOf = (playerId: string) => (playerId === selfId ? "你" : game.players.find((player) => player.id === playerId)?.name ?? "?");
+  // 「提示」：只有自己和人机时（教程后的练习局，或一个人加人机开的房间）才有
+  const botsOnly = room.members.every((candidate) => candidate.id === member?.id || candidate.bot);
+  const canHint = !spectating && !autoPlaying && myMove && (mode === "practice" || (mode === "online" && botsOnly));
+  const [hint, setHint] = useState<{ version: number; hint: Hint } | null>(null);
+  const shownHint = hint && hint.version === game.version && canHint ? hint.hint : null;
+  const toggleHint = () => setHint((current) => (current && current.version === game.version ? null : { version: game.version, hint: hintFor(game, myId) }));
+  // 第一次遇到某件事时的小贴士（只在真实对局里出）
+  const tips = useFirstTimeTips(GAME_ID, game.version, () => detectTips(game, myId), TIPS, mode === "online" && !spectating);
   const memberOf = (playerId: string) => room.members.find((candidate) => candidate.playerId === playerId);
   const online = (playerId: string) => memberOf(playerId)?.connected ?? false;
   // 结算画面只等在线、没托管的真人点「下一轮」（人机、托管、离线的人不用点）
@@ -466,7 +492,9 @@ function GameBoard({ room, busy, error, notice, brand, connection, theme, themeT
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       const key = event.key.toLowerCase();
-      if (myMove && stage === "draw") {
+      if (canHint && key === "t") {
+        toggleHint();
+      } else if (myMove && stage === "draw") {
         if (key === "d" && game.deckCount > 0) send({ type: "DRAW_DECK" });
         else if ((key === "1" || key === "2") && game.discardCounts[Number(key) - 1]! > 0) send({ type: "TAKE_DISCARD", pile: (Number(key) - 1) as 0 | 1 });
       } else if (myMove && stage === "crabPile" && (key === "1" || key === "2") && game.discardCounts[Number(key) - 1]! > 0) {
@@ -662,7 +690,7 @@ function GameBoard({ room, busy, error, notice, brand, connection, theme, themeT
         {brand}
         <div className="ss-round">
           <span>第 <b>{game.round}</b> 轮</span>
-          <span className="ss-goal">先到 <b>{game.config.targetScore}</b> 分</span>
+          <span className="ss-goal" data-tutorial="goal">先到 <b>{game.config.targetScore}</b> 分</span>
           {callChip && <span className="ss-call-chip"><img src={game.call?.kind === "stop" ? art.iconStop : art.iconLast} alt="" />{callChip}</span>}
         </div>
         <div className="ss-topbar-right">
@@ -693,7 +721,7 @@ function GameBoard({ room, busy, error, notice, brand, connection, theme, themeT
             ))}
           </div>
 
-          <div className="ss-center">
+          <div className="ss-center" data-tutorial="piles">
             <div className="ss-deck">
               {game.deckCount > 0 ? (
                 myMove && stage === "draw" ? (
@@ -723,6 +751,7 @@ function GameBoard({ room, busy, error, notice, brand, connection, theme, themeT
                       onClick={() => keep(card)}
                       disabled={busy}
                       badge={keepPick === card.id ? "留这张" : gainBadge(gainOf(me, card))}
+                      tut={`drawn:${card.id}`}
                       title={`${cardLabel(card)}：${previewText(me, [card])}`}
                     />
                   ))
@@ -747,6 +776,7 @@ function GameBoard({ room, busy, error, notice, brand, connection, theme, themeT
                     card={card}
                     className="pickable"
                     onClick={() => send({ type: "CRAB_TAKE", card: card.id })}
+                    tut={`crab-card:${card.id}`}
                     disabled={busy}
                     badge={gainBadge(gainOf(me, card))}
                     title={`${cardLabel(card)}：${previewText(me, [card])}`}
@@ -770,7 +800,7 @@ function GameBoard({ room, busy, error, notice, brand, connection, theme, themeT
                   </small>
                 </span>
                 {myPoints && (!spectating || peek) && (
-                  <span className="ss-me-points" title="卡牌分 = 对子 + 收集 + 乘数 + 美人鱼（手牌和面前一起算）">
+                  <span className="ss-me-points" data-tutorial="my-points" title="卡牌分 = 对子 + 收集 + 乘数 + 美人鱼（手牌和面前一起算）">
                     <span className="ss-big"><small>卡牌分</small><b className={declareOk ? "ok" : ""}>{myPoints.total}</b></span>
                     <span className="ss-parts">
                       <span>对子 {myPoints.pairs}</span>
@@ -778,7 +808,7 @@ function GameBoard({ room, busy, error, notice, brand, connection, theme, themeT
                       <span>乘数 {myPoints.multipliers}</span>
                       <span>美人鱼 {myPoints.mermaids}</span>
                     </span>
-                    <span className="ss-bonus" title="颜色奖励：数量最多的那种颜色有几张（只在「最后机会」时算）">
+                    <span className="ss-bonus" data-tutorial="color-bonus" title="颜色奖励：数量最多的那种颜色有几张（只在「最后机会」时算）">
                       <small>颜色奖励 {myPoints.colorBonus}</small>
                       <ColorCounts points={myPoints} />
                     </span>
@@ -790,7 +820,7 @@ function GameBoard({ room, busy, error, notice, brand, connection, theme, themeT
               <div className="ss-me-played">
                 {me.played.length > 0 ? <PlayedPairs pairs={me.played} fresh={fresh} /> : <span className="ss-muted">打出的对子摆在这里</span>}
               </div>
-              <div className={handCard < 92 ? "ss-hand small-cards" : "ss-hand normal-cards"} style={{ "--step": `${handStep}px`, "--cw": `${handCard}px` } as CSSProperties}>
+              <div className={handCard < 92 ? "ss-hand small-cards" : "ss-hand normal-cards"} data-tutorial="hand" style={{ "--step": `${handStep}px`, "--cw": `${handCard}px` } as CSSProperties}>
                 {hand.length === 0 && (spectating && me.handCount > 0
                   ? Array.from({ length: me.handCount }, (_, k) => <CardBack key={k} />)
                   : <span className="ss-muted">手里还没有牌</span>)}
@@ -830,6 +860,11 @@ function GameBoard({ room, busy, error, notice, brand, connection, theme, themeT
             <div className="ss-action-head">
               {actor && stage !== "roundEnd" && <i className="ss-dot" style={{ background: seatColor(actor.color) }} />}
               <h2>{headline}</h2>
+              {canHint && (
+                <button className={shownHint ? "quiet-button ss-hint on" : "quiet-button ss-hint"} type="button" data-tutorial="hint" data-hint-anchor={shownHint?.anchor ?? undefined} onClick={toggleHint}>
+                  提示<small>T</small>
+                </button>
+              )}
               {playing && secondsLeft !== null && <b className={secondsLeft <= 10 ? "ss-timer low" : "ss-timer"}>{secondsLeft}s</b>}
             </div>
             {detail && <p className="ss-action-detail">{detail}</p>}
@@ -842,13 +877,13 @@ function GameBoard({ room, busy, error, notice, brand, connection, theme, themeT
             {myMove && stage === "draw" && (
               <div className="ss-buttons">
                 {game.deckCount > 0 && (
-                  <button className="primary-button" type="button" disabled={busy} onClick={() => send({ type: "DRAW_DECK" })}>摸两张<small>D</small></button>
+                  <button className="primary-button" type="button" disabled={busy} data-tutorial="draw" onClick={() => send({ type: "DRAW_DECK" })}>摸两张<small>D</small></button>
                 )}
                 {([0, 1] as const).map((pile) => {
                   const top = game.discards[pile].at(-1);
                   if (!top) return null;
                   return (
-                    <button key={pile} className="quiet-button ss-take" type="button" disabled={busy} onClick={() => send({ type: "TAKE_DISCARD", pile })} title={previewText(me, [top])}>
+                    <button key={pile} className="quiet-button ss-take" type="button" disabled={busy} data-tutorial={`take:${pile}`} onClick={() => send({ type: "TAKE_DISCARD", pile })} title={previewText(me, [top])}>
                       <span className="ss-swatch" style={colorStyle(top.color)} />拿{PILE_NAME[pile]}的{CARD_NAMES[top.type]}<small>{pile + 1}</small>
                     </button>
                   );
@@ -858,7 +893,7 @@ function GameBoard({ room, busy, error, notice, brand, connection, theme, themeT
             {myMove && stage === "keep" && pileOptions.length > 1 && (
               <div className="ss-keep-list">
                 {game.drawn.map((card) => (
-                  <div key={card.id} className={keepPick === card.id ? "ss-keep-row chosen" : "ss-keep-row"}>
+                  <div key={card.id} className={keepPick === card.id ? "ss-keep-row chosen" : "ss-keep-row"} data-tutorial={`keep:${card.id}`}>
                     <span className="ss-swatch" style={colorStyle(card.color)} />
                     <span>留{cardLabel(card)}，另一张丢</span>
                     <button className="quiet-button" type="button" disabled={busy} onClick={() => keep(card, 0)}>左</button>
@@ -878,6 +913,7 @@ function GameBoard({ room, busy, error, notice, brand, connection, theme, themeT
                           key={`${a.id}-${b.id}`}
                           className="quiet-button ss-pair-button"
                           type="button"
+                          data-tutorial={`pair:${effect}`}
                           disabled={busy}
                           onClick={() => send({ type: "PLAY_PAIR", cards: [a.id, b.id] })}
                           onMouseEnter={() => setHoverPair([a.id, b.id])}
@@ -893,17 +929,17 @@ function GameBoard({ room, busy, error, notice, brand, connection, theme, themeT
                   </div>
                 )}
                 {declareOk && (
-                  <div className="ss-declare">
-                    <button className="quiet-button ss-stop" type="button" disabled={busy} onClick={() => send({ type: "STOP" })} title="本轮立刻结束，所有人拿自己的卡牌分">
+                  <div className="ss-declare" data-tutorial="declare">
+                    <button className="quiet-button ss-stop" type="button" disabled={busy} data-tutorial="stop" onClick={() => send({ type: "STOP" })} title="本轮立刻结束，所有人拿自己的卡牌分">
                       <span><img src={art.iconStop} alt="" />STOP</span><small>立刻结算 · S</small>
                     </button>
-                    <button className="quiet-button ss-last" type="button" disabled={busy} onClick={() => send({ type: "LAST_CHANCE" })} title="其他人各再打一回合；你分最高（平分也算）就拿卡牌分 + 颜色奖励，他们只拿颜色奖励；否则反过来">
+                    <button className="quiet-button ss-last" type="button" disabled={busy} data-tutorial="last-chance" onClick={() => send({ type: "LAST_CHANCE" })} title="其他人各再打一回合；你分最高（平分也算）就拿卡牌分 + 颜色奖励，他们只拿颜色奖励；否则反过来">
                       <span><img src={art.iconLast} alt="" />最后机会</span><small>赌你最高 · L</small>
                     </button>
                   </div>
                 )}
                 <div className="ss-buttons">
-                  <button className={declareOk || pairs.length > 0 ? "quiet-button" : "primary-button"} type="button" disabled={busy} onClick={() => send({ type: "END_TURN" })}>
+                  <button className={declareOk || pairs.length > 0 ? "quiet-button" : "primary-button"} type="button" disabled={busy} data-tutorial="end-turn" onClick={() => send({ type: "END_TURN" })}>
                     结束回合<small>E</small>
                   </button>
                 </div>
@@ -912,7 +948,7 @@ function GameBoard({ room, busy, error, notice, brand, connection, theme, themeT
             {myMove && stage === "crabPile" && (
               <div className="ss-buttons">
                 {([0, 1] as const).map((pile) => game.discardCounts[pile] > 0 && (
-                  <button key={pile} className="primary-button" type="button" disabled={busy} onClick={() => send({ type: "CRAB_PILE", pile })}>
+                  <button key={pile} className="primary-button" type="button" disabled={busy} data-tutorial={`crab-pile:${pile}`} onClick={() => send({ type: "CRAB_PILE", pile })}>
                     看{PILE_NAME[pile]}<small>{game.discardCounts[pile]} 张 · {pile + 1}</small>
                   </button>
                 ))}
@@ -923,7 +959,7 @@ function GameBoard({ room, busy, error, notice, brand, connection, theme, themeT
                 {thieves.map((index) => {
                   const player = game.players[index]!;
                   return (
-                    <button key={player.id} className="primary-button" type="button" disabled={busy} onClick={() => send({ type: "STEAL", target: player.id })}>
+                    <button key={player.id} className="primary-button" type="button" disabled={busy} data-tutorial={`steal:${player.id}`} onClick={() => send({ type: "STEAL", target: player.id })}>
                       偷{player.name}<small>手里 {player.handCount} 张</small>
                     </button>
                   );
@@ -933,7 +969,7 @@ function GameBoard({ room, busy, error, notice, brand, connection, theme, themeT
             {stage === "roundEnd" && playing && (!spectating || hideSummary) && (
               <div className="ss-buttons">
                 {!spectating && (
-                  <button className="primary-button" type="button" disabled={busy || game.ready.includes(myId)} onClick={() => send({ type: "READY" })}>
+                  <button className="primary-button" type="button" disabled={busy || game.ready.includes(myId)} data-tutorial="ready" onClick={() => send({ type: "READY" })}>
                     {game.ready.includes(myId) ? "已准备" : "下一轮"}<small>N</small>
                   </button>
                 )}
@@ -943,14 +979,15 @@ function GameBoard({ room, busy, error, notice, brand, connection, theme, themeT
             {(error || shownNotice) && <p className={error ? "ss-feedback error" : "ss-feedback"} role={error ? "alert" : "status"}>{error || shownNotice}</p>}
           </section>
 
+          {mode !== "online" && chat}
           <section className="ss-panel ss-tabs">
-            <div className="ss-tab-bar" role="tablist">
+            {mode !== "online" ? <h3 className="ss-log-title">动作记录</h3> : <div className="ss-tab-bar" role="tablist">
               <button type="button" role="tab" aria-selected={sideTab === "log"} className={sideTab === "log" ? "active" : ""} onClick={() => setSideTab("log")}>动作记录</button>
               <button type="button" role="tab" aria-selected={sideTab === "chat"} className={sideTab === "chat" ? "active" : ""} onClick={() => setSideTab("chat")}>
                 聊天{unread > 0 && <em>{unread}</em>}
               </button>
-            </div>
-            {sideTab === "log" ? (
+            </div>}
+            {sideTab === "log" || mode !== "online" ? (
               <ul className="ss-log">{log.map((line) => <li key={line.key}>{line.text}</li>)}</ul>
             ) : (
               <div className="ss-chat">{chat}</div>
@@ -958,7 +995,23 @@ function GameBoard({ room, busy, error, notice, brand, connection, theme, themeT
           </section>
         </aside>
       </div>
-      {game.phase === "finished" && <FinalDialog game={game} room={room} myId={selfId} spectating={spectating} onRematch={onRematch} onLeave={onLeave} />}
+      {game.phase === "finished" && !finalHidden && (
+        <FinalDialog game={game} room={room} myId={selfId} memberId={member?.id ?? ""} spectating={spectating} onRematch={onRematch} onLeave={onLeave} actions={finalActions} />
+      )}
+      {shownHint && (
+        <Coach
+          view={{
+            key: `hint-${game.version}`,
+            say: shownHint.say,
+            ...(shownHint.note ? { note: shownHint.note } : {}),
+            anchor: shownHint.anchor,
+            focus: false,
+            face: "think",
+            actions: <button className="quiet-button" type="button" onClick={() => setHint(null)}>知道了</button>,
+          }}
+        />
+      )}
+      {tips.tip && <TipToast tip={tips.tip} onClose={tips.dismiss} onNever={tips.never} />}
     </div>
   );
 }
@@ -1005,7 +1058,7 @@ function RoundSummary({ game, myId, readyNeeded, secondsLeft, busy, onReady, onH
         <h2>第 {game.round} 轮 · {title}</h2>
         <button className="quiet-button" type="button" onClick={onHide}>看牌桌</button>
       </header>
-      <ol>
+      <ol data-tutorial="summary">
         {rows.map(({ player, index }) => {
           const result = player.lastRound!;
           const points = cardPoints(player.hand, player.played);
@@ -1047,16 +1100,20 @@ function RoundSummary({ game, myId, readyNeeded, secondsLeft, busy, onReady, onH
   );
 }
 
-function FinalDialog({ game, room, myId, spectating, onRematch, onLeave }: {
+function FinalDialog({ game, room, myId, memberId, spectating, onRematch, onLeave, actions }: {
   game: GameState;
   room: LobbyRoomSnapshot;
   myId: string;
+  /** 自己在 room.members 里的 id（看自己点没点「再来一局」）。 */
+  memberId: string;
+  /** 替代「再来一局」的按钮（教程的练习局）。 */
+  actions?: ReactNode;
   spectating: boolean;
   onRematch: (accept: boolean) => void;
   onLeave: () => void;
 }) {
   const result = game.finalResult!;
-  const accepted = room.rematch?.acceptedIds.includes(socket.id ?? "") ?? false;
+  const accepted = room.rematch?.acceptedIds.includes(memberId) ?? false;
   const won = (id: string) => result.winners.includes(id);
   // 获胜者排最前（四美人鱼直接获胜时总分不一定最高），其余按总分、再按最后一轮。
   const rows = [...game.players].sort((a, b) => Number(won(b.id)) - Number(won(a.id)) || b.score - a.score || (b.rounds.at(-1) ?? 0) - (a.rounds.at(-1) ?? 0));
@@ -1077,9 +1134,9 @@ function FinalDialog({ game, room, myId, spectating, onRematch, onLeave }: {
             ? `${winnerNames}集齐了 4 张美人鱼，直接获胜。`
             : `打了 ${game.round} 轮，有人到了 ${game.config.targetScore} 分，总分最高者获胜${tie ? "（总分一样，比最后一轮的得分）" : ""}。`}
         </p>
-        <ol className="ss-standings">
+        <ol className="ss-standings" data-tutorial="standings">
           {rows.map((player, rank) => (
-            <li key={player.id} className={won(player.id) ? "winner" : ""}>
+            <li key={player.id} className={won(player.id) ? "winner" : ""} data-tutorial={`final:${player.id}`}>
               <span className="ss-rank">{rank + 1}</span>
               <i className="ss-dot" style={{ background: seatColor(player.color) }} />
               <strong>{player.name}{player.id === myId ? "（你）" : ""}</strong>
@@ -1088,7 +1145,9 @@ function FinalDialog({ game, room, myId, spectating, onRematch, onLeave }: {
             </li>
           ))}
         </ol>
-        {spectating ? (
+        {actions ? (
+          <div className="gm-panel-actions ss-final-actions">{actions}</div>
+        ) : spectating ? (
           <div className="ss-rematch">
             <span>{room.rematch ? `等玩家决定要不要再来一局（${room.rematch.acceptedIds.length}/${room.members.length} 人同意）` : "对局结束"}</span>
             <div className="gm-panel-actions">

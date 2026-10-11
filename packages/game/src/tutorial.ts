@@ -100,7 +100,7 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
   {
     kind: "info", id: "goal", lesson: "目标", anchor: "goal",
     say: "海盐与纸比的是谁先攒到 40 分。",
-    note: "一局打好几轮，每轮攒牌得分。我们从一局中间开始：你 26 分，咕噜一号 33 分。",
+    note: "（三人局 35 分、四人局 30 分。）一局打好几轮，我们从一局中间开始：你 26 分，咕噜一号 33 分。",
   },
   {
     kind: "info", id: "hand", lesson: "手牌和卡牌分", anchor: "hand",

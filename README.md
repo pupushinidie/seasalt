@@ -54,6 +54,15 @@ npm run build:game && node scripts/test-bot.mjs host 机器人 3 --start-at=3   
   - 宣告：抽样估计对手的卡牌分，比较 STOP / 最后机会 / 继续；这一轮结算会让有人到目标分时按谁会赢来定。
 - 强度（`~/projects/qa-reports/tools/bots/sim-seasalt.ts`）见 memory `bots.md`。
 
+## 新手教程
+
+做法照站内统一的教程（`~/projects/pipeline/handbook/tutorial-notes.md`，参考翻七）：浏览器里直接跑规则引擎，不连服务器。
+
+- 剧本 `packages/game/src/tutorial.ts`（21 步，两人局第 4 轮中间开始）：摸两张留一张 → 两只蟹翻弃牌堆挑船 → 两艘船再来一回合 → 拿弃牌堆顶的泳者 → 鲨鱼 + 泳者偷到美人鱼（开局按随机数把美人鱼放在会被偷的位置）→ 讲 STOP、最后机会、颜色奖励 → 你喊最后机会 → 咕噜一号最后一回合打两条鱼 → 你赌赢 42 比 35 → 牌堆摸空作废、托管 → 接练习局。单测 `tutorial.test.ts`。
+- 网页：`apps/web/src/tutorial/`（共用教练层，从翻七复制）、`TutorialMode.tsx`、`tutorialGame.ts`（「提示」= `botAdvice` 的理由，小贴士）。首页和等候房间有入口，地址带 `?tutorial` 直接打开。
+- 「提示」（键盘 T）只在练习局或只有自己和人机的房间出现。
+- 走查：`node ~/projects/qa-reports/tools/tut-seasalt.mjs <输出目录> flow|skip|waiting|room [1440|1920|1024|390] [night|day]`（先 `npm run dev`）。
+
 ## 目录
 
 - `packages/game`：纯函数规则引擎（`engine.ts`）、牌表和计分（`cards.ts`）和测试。牌堆顺序、随机数、种子只在服务端；`redactGameForViewer` 去掉别人没亮出的手牌（只留张数）、刚摸的两张（只有摸牌的人看得到）、弃牌堆里面的牌（只留堆顶；打蟹挑牌的人看得到他选的那一整堆），以及事件里带 `privateTo` 的私密牌（摸到的、蟹拿的、鱼摸的、偷到的）。
