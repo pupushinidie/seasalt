@@ -59,3 +59,19 @@ export type {
 } from "./roomTypes.js";
 export { botAdvice, botCommand, DEFAULT_BOT_PARAMS } from "./bot.js";
 export type { BotAdvice, BotParams } from "./bot.js";
+export {
+  anchorVisible,
+  createPracticeGame,
+  createTutorialGame,
+  sameCommand,
+  TUTORIAL_CARDS,
+  TUTORIAL_RIVAL,
+  TUTORIAL_RIVALS,
+  TUTORIAL_ROUND,
+  TUTORIAL_SCORES,
+  TUTORIAL_SELF,
+  TUTORIAL_STEPS,
+  tutorialActor,
+  tutorialApply,
+} from "./tutorial.js";
+export type { TutorialFace, TutorialStep } from "./tutorial.js";
