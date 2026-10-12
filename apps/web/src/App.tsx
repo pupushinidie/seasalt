@@ -316,6 +316,7 @@ function App() {
   if (room) {
     return (
       <main className="app-shell ss-room">
+        <SsBackdrop />
         <header className="topbar">
           <Brand />
           <div className="topbar-right">
@@ -353,6 +354,7 @@ function App() {
 
   return (
     <main className="app-shell ss-home">
+      <SsBackdrop />
       <header className="topbar">
         <Brand />
         <div className="topbar-right">
@@ -498,6 +500,18 @@ function CardList() {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+/** 全屏背景：把对局场景铺满窗口（16:9 居中裁切），上面盖一层罩色让面板更突出。首页和等候房间放在 <main> 的第一个子元素。 */
+function SsBackdrop() {
+  const base = import.meta.env.BASE_URL;
+  return (
+    <div className="ss-backdrop" aria-hidden="true">
+      <div className="ss-backdrop-art ss-backdrop-art--day" style={{ backgroundImage: `url(${base}art/bg/day.png)` }} />
+      <div className="ss-backdrop-art ss-backdrop-art--night" style={{ backgroundImage: `url(${base}art/bg/night.png)` }} />
+      <div className="ss-backdrop-veil" />
     </div>
   );
 }

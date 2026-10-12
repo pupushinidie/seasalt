@@ -661,3 +661,19 @@ button.ss-opp.pickable:hover { filter: brightness(1.15); }
   .ss-screen .tut-toast p { flex: 1 1 180px; }
   .ss-screen .tut-toast-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; width: 100%; }
 }
+
+/* ---------- 全屏背景：首页、等候房间的场景铺满窗口 ---------- */
+.ss-backdrop { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; background: #0a1418; }
+.ss-backdrop-art {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100vw, calc(100vh * 16 / 9));
+  height: max(100vh, calc(100vw * 9 / 16));
+  transform: translate(-50%, -50%);
+  background-size: 100% 100%;
+  image-rendering: pixelated;
+}
+.ss-backdrop-art--day { display: none; }
+.ss-backdrop-veil { position: absolute; inset: 0; background: #050a0c; opacity: 0.4; }
+.app-shell.ss-home > :not(.ss-backdrop):not(.gm-modal-backdrop), .app-shell.ss-room > :not(.ss-backdrop):not(.gm-modal-backdrop) { position: relative; z-index: 1; }
