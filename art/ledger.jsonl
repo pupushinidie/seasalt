@@ -32,3 +32,9 @@
 {"time": "2026-10-08 01:10:44", "name": "fx-shark-s34", "endpoint": "/animate-with-text-v3", "usage": {"type": "usd", "usd": 0.030642254875765905}, "seconds": 128.0, "status": "completed"}
 {"time": "2026-10-08 01:14:06", "name": "fx-mermaid-s35", "endpoint": "/animate-with-text-v3", "usage": {"type": "usd", "usd": 0.02420042783684201}, "seconds": 91.3, "status": "completed"}
 {"time": "2026-10-08 01:16:11", "name": "fx-boat2-s36", "endpoint": "/animate-with-text-v3", "usage": {"type": "usd", "usd": 0.031170012977388167}, "seconds": 123.1, "status": "completed"}
+{"time": "2026-10-12 09:41:35", "name": "day-s1903", "endpoint": "/create-image-pixen", "usage": {"type": "generations", "generations": 1.0}, "seconds": 46.9}
+{"time": "2026-10-12 09:41:58", "name": "day-s1901", "endpoint": "/create-image-pixen", "usage": {"type": "generations", "generations": 1.0}, "seconds": 70.1}
+{"time": "2026-10-12 09:42:28", "name": "day-s1902", "endpoint": "/create-image-pixen", "usage": {"type": "generations", "generations": 1.0}, "seconds": 99.7}
+{"time": "2026-10-12 09:42:36", "name": "night-s1901", "endpoint": "/create-image-pixen", "usage": {"type": "generations", "generations": 1.0}, "seconds": 60.4}
+{"time": "2026-10-12 09:42:50", "name": "night-s1902", "endpoint": "/create-image-pixen", "usage": {"type": "generations", "generations": 1.0}, "seconds": 51.9}
+{"time": "2026-10-12 09:44:12", "name": "night-s1903", "endpoint": "/create-image-pixen", "usage": {"type": "generations", "generations": 1.0}, "seconds": 104.4}
